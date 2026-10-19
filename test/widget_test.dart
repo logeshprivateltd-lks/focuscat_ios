@@ -1,30 +1,54 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// test/widget_test.dart
+// Basic unit and smoke tests for FocusCat models and logic.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:focuscat_ios/main.dart';
+import 'package:focuscat_ios/models/cat_models.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const FocusCatApp());
+  group('FocusCat Models Test', () {
+    test('WatchedSiteRule calculation test', () {
+      final rule = WatchedSiteRule(
+        domain: 'youtube.com',
+        dailyMinutes: 30,
+        secondsUsedToday: 600,
+      );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+      expect(rule.totalAllowedSeconds, 1800);
+      expect(rule.remainingSeconds, 1200);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+      final updated = rule.copyWith(secondsUsedToday: 1800);
+      expect(updated.remainingSeconds, 0);
+    });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    test('CatNote serialization and deserialization test', () {
+      final now = DateTime.now();
+      final note = CatNote(
+        id: 'test-note-1',
+        text: 'Finish Codemagic setup',
+        createdAt: now,
+      );
+
+      final json = note.toJson();
+      final recovered = CatNote.fromJson(json);
+
+      expect(recovered.id, 'test-note-1');
+      expect(recovered.text, 'Finish Codemagic setup');
+      expect(recovered.createdAt.toIso8601String(), now.toIso8601String());
+    });
+
+    test('CatReminder serialization and deserialization test', () {
+      final reminder = CatReminder(
+        id: 'rem-1',
+        title: 'Drink Water',
+        timeLabel: '14:00',
+      );
+
+      final json = reminder.toJson();
+      final recovered = CatReminder.fromJson(json);
+
+      expect(recovered.id, 'rem-1');
+      expect(recovered.title, 'Drink Water');
+      expect(recovered.timeLabel, '14:00');
+    });
   });
 }

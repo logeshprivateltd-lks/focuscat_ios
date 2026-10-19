@@ -1,0 +1,148 @@
+# ==============================================================================
+# Codemagic CI/CD Configuration for FocusCat iOS
+# ==============================================================================
+# Documentation: https://docs.codemagic.io/yaml-quick-start/
+
+workflows:
+  # ---------------------------------------------------------------------------
+  # 1. iOS CI Workflow (Pull Requests & Main Branch Verification)
+  #    Runs tests, linting, and unsigned build validation without needing certificates.
+  # ---------------------------------------------------------------------------
+  ios-ci:
+    name: iOS CI & Build Verification
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    triggering:
+      events:
+        - push
+        - pull_request
+      branch_patterns:
+        - pattern: 'main'
+          include: true
+          source: true
+    scripts:
+      - name: Get Flutter packages
+        script: |
+          flutter packages pub get
+      - name: Flutter analyze
+        script: |
+          flutter analyze
+      - name: Flutter unit tests
+        script: |
+          flutter test
+      - name: Install CocoaPods
+        script: |
+          cd ios && pod install && cd ..
+      - name: Build iOS (Unsigned Release)
+        script: |
+          flutter build ios --release --no-codesign
+    artifacts:
+      - build/ios/iphoneos/*.app
+      - flutter_drive.log
+
+  # ---------------------------------------------------------------------------
+  # 2. iOS Release Workflow (App Store / TestFlight)
+  #    Triggered on version tags (e.g. v2.0.0) or run manually from Codemagic.
+  #    Prerequisite: Add the 'app_store_credentials' group in Codemagic UI:
+  #      - APP_STORE_CONNECT_ISSUER_ID
+  #      - APP_STORE_CONNECT_KEY_IDENTIFIER
+  #      - APP_STORE_CONNECT_PRIVATE_KEY
+  #      - CERTIFICATE_PRIVATE_KEY
+  # ---------------------------------------------------------------------------
+  ios-release:
+    name: iOS TestFlight / App Store Release
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      groups:
+        - app_store_credentials
+      vars:
+        BUNDLE_ID: "com.example.focuscatIos"
+        XCODE_WORKSPACE: "ios/Runner.xcworkspace"
+        XCODE_SCHEME: "Runner"
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+    scripts:
+      - name: Set up keychain
+        script: |
+          keychain initialize
+      - name: Fetch signing files from App Store Connect
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+      - name: Set up code signing settings on Xcode project
+        script: |
+          xcode-project use-profiles
+      - name: Get Flutter packages
+        script: |
+          flutter packages pub get
+      - name: Flutter analyze
+        script: |
+          flutter analyze
+      - name: Flutter unit tests
+        script: |
+          flutter test
+      - name: Install CocoaPods
+        script: |
+          cd ios && pod install && cd ..
+      - name: Build IPA for distribution
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=$HOME/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_identifier: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+
+  # ---------------------------------------------------------------------------
+  # 3. Android Release Workflow (APK & App Bundle)
+  # ---------------------------------------------------------------------------
+  android-release:
+    name: Android Release Build
+    max_build_duration: 30
+    instance_type: linux_x2
+    environment:
+      flutter: stable
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+    scripts:
+      - name: Get Flutter packages
+        script: |
+          flutter packages pub get
+      - name: Flutter analyze
+        script: |
+          flutter analyze
+      - name: Flutter unit tests
+        script: |
+          flutter test
+      - name: Build Android APK
+        script: |
+          flutter build apk --release
+      - name: Build Android App Bundle
+        script: |
+          flutter build appbundle --release
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+      - build/app/outputs/bundle/release/*.aab
