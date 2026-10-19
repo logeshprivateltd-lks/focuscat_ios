@@ -15,6 +15,7 @@ import '../services/notification_service.dart';
 import '../services/persistence_service.dart';
 import '../services/screen_time_service.dart';
 import '../services/telemetry_service.dart';
+import '../services/widget_service.dart';
 import '../views/main_settings_window.dart';
 
 class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
@@ -27,6 +28,7 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
   final CatSoundService _sound = CatSoundService.instance;
   final ScreenTimeService _screenTime = ScreenTimeService.instance;
   final LiveActivityService _liveActivities = LiveActivityService.instance;
+  final WidgetService _widgetService = WidgetService.instance;
 
   ScreenTimeService get screenTime => _screenTime;
 
@@ -212,8 +214,10 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
     await _notifications.init();
     await _sound.init();
     await _liveActivities.init();
+    await _widgetService.init();
     await _loadPersistedData();
     _checkMidnightReset();
+    updateHomeScreenWidget(force: true);
 
     if (waterReminderEnabled) {
       await _notifications.startHourlyWaterReminder();
@@ -306,10 +310,32 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   // -------------------------------------------------------------------------
-  // Dynamic Island / Live Activity Update
+  // Dynamic Island / Live Activity & iOS Home Screen Widget Update
   // -------------------------------------------------------------------------
+  String get catMoodName {
+    if (isMoodLocked && lockedPose != null) {
+      return lockedPose!.name.toUpperCase();
+    }
+    switch (pose) {
+      case CatPose.sleep:
+        return 'Sleepy';
+      case CatPose.pat:
+        return 'Purring';
+      case CatPose.greet:
+        return 'Happy';
+      case CatPose.bored:
+        return 'Resting';
+      case CatPose.walk:
+        return 'Wandering';
+      case CatPose.angry:
+      case CatPose.confront:
+        return 'Shielding';
+      case CatPose.sit:
+        return isPatrolling ? 'Patrolling' : 'Chill';
+    }
+  }
+
   void updateLiveActivity({bool force = false}) {
-    if (!liveActivityEnabled && !force) return;
     final activeRule = getActiveWatchedRule();
     String target = '';
     if (activeRule != null) {
@@ -335,15 +361,56 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
       remSeconds = activeRule.remainingSeconds;
     }
 
-    _liveActivities.update(
+    if (liveActivityEnabled || force) {
+      _liveActivities.update(
+        catPose: pose.name,
+        catEmoji: catEmoji,
+        statusText: speechBubble,
+        title: title,
+        remainingSeconds: remSeconds,
+        endTimeTimestamp: endTime,
+        isPatrolling: isPatrolling,
+        targetAppOrDomain: target,
+      );
+    }
+
+    updateHomeScreenWidget(force: force);
+  }
+
+  /// Sends the current cat, mood, timer, and patrol state to the iOS Home Screen Widget.
+  Future<void> updateHomeScreenWidget({bool force = false}) async {
+    final activeRule = getActiveWatchedRule();
+    String target = '';
+    if (activeRule != null) {
+      target = activeRule.domain;
+    } else if (screenTimeApps.any((a) => a.isBlocked)) {
+      target = screenTimeApps.firstWhere((a) => a.isBlocked).appName;
+    } else if (watchedSites.isNotEmpty) {
+      target = watchedSites.first.domain;
+    } else {
+      target = 'Safari & Apps';
+    }
+
+    int remSeconds = 0;
+    if (focusEndTime != null) {
+      remSeconds = focusSecondsRemaining;
+    } else if (snoozeEndTime != null) {
+      remSeconds = snoozeSecondsRemaining;
+    } else if (activeRule != null) {
+      remSeconds = activeRule.remainingSeconds;
+    }
+
+    await _widgetService.updateWidgetData(
       catPose: pose.name,
       catEmoji: catEmoji,
-      statusText: speechBubble,
-      title: title,
-      remainingSeconds: remSeconds,
-      endTimeTimestamp: endTime,
+      catMood: catMoodName,
+      speechBubble: speechBubble,
       isPatrolling: isPatrolling,
+      focusSecondsRemaining: remSeconds,
+      focusEndTime: focusEndTime,
       targetAppOrDomain: target,
+      dailyFocusMinutes: 25,
+      company: 'LKS.pvt.ltd company',
     );
   }
 

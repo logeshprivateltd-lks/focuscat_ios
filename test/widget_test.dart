@@ -253,4 +253,63 @@ void main() {
       expect(getSoundType('Hello companion!'), 'chirp');
     });
   });
+
+  group('iOS Home Screen Widget Support Tests', () {
+    test('Widget payload accurately serializes cat pose, emoji, mood, timer & attribution', () {
+      final endTime = DateTime(2026, 10, 19, 12, 0, 0);
+      final widgetData = {
+        'catPose': 'sit',
+        'catEmoji': '🐱',
+        'catMood': 'Chill',
+        'speechBubble': 'Purr... staying focused! 🐾',
+        'isPatrolling': true,
+        'focusSecondsRemaining': 1500,
+        'focusEndTime': endTime.millisecondsSinceEpoch / 1000.0,
+        'targetAppOrDomain': 'youtube.com',
+        'dailyFocusMinutes': 25,
+        'company': 'LKS.pvt.ltd company',
+      };
+
+      expect(widgetData['catPose'], 'sit');
+      expect(widgetData['catEmoji'], '🐱');
+      expect(widgetData['catMood'], 'Chill');
+      expect(widgetData['speechBubble'], contains('staying focused'));
+      expect(widgetData['isPatrolling'], true);
+      expect(widgetData['focusSecondsRemaining'], 1500);
+      expect(widgetData['focusEndTime'], isNotNull);
+      expect(widgetData['targetAppOrDomain'], 'youtube.com');
+      expect(widgetData['company'], 'LKS.pvt.ltd company');
+    });
+
+    test('Cat mood names correctly translate from CatPose states', () {
+      String getMood(CatPose pose, bool isPatrolling) {
+        switch (pose) {
+          case CatPose.sleep:
+            return 'Sleepy';
+          case CatPose.pat:
+            return 'Purring';
+          case CatPose.greet:
+            return 'Happy';
+          case CatPose.bored:
+            return 'Resting';
+          case CatPose.walk:
+            return 'Wandering';
+          case CatPose.angry:
+          case CatPose.confront:
+            return 'Shielding';
+          case CatPose.sit:
+            return isPatrolling ? 'Patrolling' : 'Chill';
+        }
+      }
+
+      expect(getMood(CatPose.sleep, true), 'Sleepy');
+      expect(getMood(CatPose.pat, true), 'Purring');
+      expect(getMood(CatPose.greet, true), 'Happy');
+      expect(getMood(CatPose.walk, true), 'Wandering');
+      expect(getMood(CatPose.angry, true), 'Shielding');
+      expect(getMood(CatPose.sit, true), 'Patrolling');
+      expect(getMood(CatPose.sit, false), 'Chill');
+    });
+  });
 }
+

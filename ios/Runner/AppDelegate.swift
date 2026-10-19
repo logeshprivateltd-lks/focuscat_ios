@@ -2,6 +2,7 @@ import Flutter
 import UIKit
 import AVKit
 import AVFoundation
+import WidgetKit
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, AVPictureInPictureControllerDelegate {
@@ -38,6 +39,34 @@ import AVFoundation
           self.startPip(result: result)
         case "stopPip":
           self.stopPip(result: result)
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
+
+      // Register Widget MethodChannel (iOS Home Screen Widget Support)
+      let widgetChannel = FlutterMethodChannel(name: "com.focuscat.widget", binaryMessenger: controller.binaryMessenger)
+      widgetChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
+        switch call.method {
+        case "updateWidgetData":
+          if let args = call.arguments as? [String: Any] {
+            let defaults = UserDefaults(suiteName: "group.com.focuscat.ios") ?? UserDefaults.standard
+            for (key, val) in args {
+              defaults.set(val, forKey: key)
+            }
+            defaults.synchronize()
+            if #available(iOS 14.0, *) {
+              WidgetCenter.shared.reloadAllTimelines()
+            }
+            result(true)
+          } else {
+            result(false)
+          }
+        case "reloadWidgets":
+          if #available(iOS 14.0, *) {
+            WidgetCenter.shared.reloadAllTimelines()
+          }
+          result(true)
         default:
           result(FlutterMethodNotImplemented)
         }

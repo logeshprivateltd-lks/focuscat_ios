@@ -37,7 +37,13 @@ class FocusDashboardView extends StatelessWidget {
         const SizedBox(height: 10),
 
         // ---------------------------------------------------------------------
-        // 3. Quick Notes & Upcoming Reminders Preview
+        // 3. iOS Home Screen Widget (WidgetKit) Card
+        // ---------------------------------------------------------------------
+        _buildHomeScreenWidgetCard(context, vm),
+        const SizedBox(height: 10),
+
+        // ---------------------------------------------------------------------
+        // 4. Quick Notes & Upcoming Reminders Preview
         // ---------------------------------------------------------------------
         _buildNotesAndRemindersCard(context, vm),
         const SizedBox(height: 12),
@@ -542,7 +548,276 @@ class FocusDashboardView extends StatelessWidget {
   }
 
   // ===========================================================================
-  // 3. Quick Notes & Reminders Card
+  // 3. iOS Home Screen Widget (WidgetKit) Card
+  // ===========================================================================
+  Widget _buildHomeScreenWidgetCard(BuildContext context, CatViewModel vm) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1219),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF1E2838)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.6),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2E2008),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.square_grid_2x2_fill,
+                      size: 16,
+                      color: Color(0xFFFBBF24),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'iOS Home Screen Widget',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFE2E8F0),
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'WidgetKit Ready',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFFBBF24),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Keep your kawaii companion, live Pomodoro timer, and patrol guard visible right on your iPhone Home Screen.',
+            style: TextStyle(
+              fontSize: 11,
+              color: Color(0xFF8B98A5),
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Widget Simulation Preview
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF070B11), Color(0xFF0F1A2A)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF1E2E42)),
+            ),
+            child: Row(
+              children: [
+                // Cat Widget Graphic
+                Container(
+                  width: 58,
+                  height: 58,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF162336),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF263C59)),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        vm.catEmoji,
+                        style: const TextStyle(fontSize: 26),
+                      ),
+                      const SizedBox(height: 1),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF4ADE80).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Text(
+                          vm.catMoodName.toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 7.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF4ADE80),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Right: Details
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'FocusCat Companion',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFF8FAFC),
+                            ),
+                          ),
+                          Text(
+                            vm.focusSecondsRemaining > 0
+                                ? vm.formatTime(vm.focusSecondsRemaining)
+                                : 'Ready 🍅',
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'Courier',
+                              color: Color(0xFF4ADE80),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          vm.speechBubble,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            color: Color(0xFFCBD5E1),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(
+                            CupertinoIcons.shield_fill,
+                            size: 10,
+                            color: Color(0xFF4ADE80),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              vm.watchedSites.isNotEmpty
+                                  ? 'Guarding ${vm.watchedSites.first.domain}'
+                                  : 'Guarding Safari & Apps',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 9.5,
+                                color: Color(0xFFFBBF24),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const Text(
+                            'LKS.pvt.ltd',
+                            style: TextStyle(
+                              fontSize: 8.5,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Sync Action Button
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFFBBF24),
+                side: const BorderSide(color: Color(0xFF4A3408)),
+                backgroundColor: const Color(0xFF1F1706),
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                vm.updateHomeScreenWidget(force: true);
+                vm.setSpeechBubble(
+                  'Home Widget updated with cute cat & focus state! 🐾',
+                  speakAloud: true,
+                );
+              },
+              icon: const Icon(CupertinoIcons.arrow_2_circlepath, size: 14),
+              label: const Text(
+                'Sync & Refresh Home Screen Widget 🐾',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+
+          // Tip
+          const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('💡 ', style: TextStyle(fontSize: 11)),
+              Expanded(
+                child: Text(
+                  'Add to Home Screen: Touch & hold empty Home Screen area → tap "+" → select "FocusCat" → choose your cat widget size.',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    color: Color(0xFF64748B),
+                    height: 1.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // 4. Quick Notes & Reminders Card
   // ===========================================================================
   Widget _buildNotesAndRemindersCard(BuildContext context, CatViewModel vm) {
     return Container(

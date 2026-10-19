@@ -1700,6 +1700,202 @@ class _MainSettingsWindowState extends State<MainSettingsWindow> {
             ],
           ),
         ),
+
+        const SizedBox(height: 12),
+
+        // Card 3: iOS Home Screen Widget (WidgetKit)
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F1520),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFF1A2434)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(CupertinoIcons.square_grid_2x2_fill,
+                          color: Color(0xFFF59E0B), size: 16),
+                      SizedBox(width: 8),
+                      Text(
+                        'iOS Home Screen Widget',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFE6EDF3),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'WidgetKit',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFF59E0B),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Displays your adorable kawaii cat on your iPhone Home Screen and Lock Screen in Small, Medium, or Large sizes with live focus countdown and speech bubble.',
+                style: TextStyle(fontSize: 11, color: Color(0xFF8B98A5), height: 1.3),
+              ),
+              const SizedBox(height: 12),
+
+              // Widget Live Preview
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0A0E17),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF1E2838)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Center(
+                        child: Text(
+                          vm.catEmoji,
+                          style: const TextStyle(fontSize: 28),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'FocusCat · ${vm.catMoodName}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFFF1F5F9),
+                                ),
+                              ),
+                              Text(
+                                vm.focusSecondsRemaining > 0
+                                    ? vm.formatTime(vm.focusSecondsRemaining)
+                                    : 'Ready',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF4ADE80),
+                                  fontFamily: 'Courier',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            vm.speechBubble,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2E2008),
+                    foregroundColor: const Color(0xFFFBBF24),
+                    side: const BorderSide(color: Color(0xFF5A3E10)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    vm.updateHomeScreenWidget(force: true);
+                    vm.setSpeechBubble(
+                      'Home Screen widget synchronized! 🐾 Check your iPhone Home Screen.',
+                      speakAloud: true,
+                    );
+                  },
+                  icon: const Icon(CupertinoIcons.arrow_2_circlepath, size: 14),
+                  label: const Text(
+                    'Sync & Refresh Home Screen Widget 🐾',
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              // How to Add Widget Tutorial
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF131A26),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF1F2B3E)),
+                ),
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '📱 How to Add on iPhone Home Screen:',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFCBD5E1),
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      '1. Touch & hold any empty area on your Home Screen until apps jiggle.\n'
+                      '2. Tap the "+" button in the top-left corner.\n'
+                      '3. Search "FocusCat" and choose Small, Medium, or Large.\n'
+                      '4. Tap "Add Widget" to keep your cat on your Home Screen!',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        color: Color(0xFF8B98A5),
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
