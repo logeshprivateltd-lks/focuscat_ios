@@ -1,6 +1,7 @@
 // lib/widgets/cat_stage_widget.dart
 // Interactive Dynamic Island perched vector cat with bounded 2D free dragging,
 // multi-tap gesture detection, speech bubble, and smooth snap-back mechanics.
+// The cat lives completely free on the phone screen without any enclosing tab or window box.
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -9,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../models/cat_models.dart';
 import '../painters/focus_cat_vector_painter.dart';
 import '../viewmodels/cat_viewmodel.dart';
 
@@ -89,12 +91,12 @@ class _CatStageWidgetState extends State<CatStageWidget>
 
     final topPadding = MediaQuery.of(context).padding.top;
     final isPerchedOnIsland =
-        vm.catXOffset.abs() < 12 && vm.catYOffset.abs() < 12;
+        vm.catXOffset.abs() < 14 && vm.catYOffset.abs() < 14;
 
     // Cat size: on Dynamic Island perch, compact 48x36 * scale;
     // when dragged freely, scales up to 64x48 * scale
-    final baseWidth = isPerchedOnIsland ? 48.0 : 64.0;
-    final baseHeight = isPerchedOnIsland ? 36.0 : 48.0;
+    final baseWidth = isPerchedOnIsland ? 50.0 : 64.0;
+    final baseHeight = isPerchedOnIsland ? 38.0 : 48.0;
     final catW = baseWidth * vm.catScale;
     final catH = baseHeight * vm.catScale;
 
@@ -103,16 +105,18 @@ class _CatStageWidgetState extends State<CatStageWidget>
         final screenW = constraints.maxWidth;
         final screenH = constraints.maxHeight;
 
-        // Strict clamp bounds within SafeArea
+        // Strict clamp bounds within screen: allows cat to reach the very bottom bezel
         final maxDragX = (screenW / 2) - (catW / 2) - 12.0;
         final minDragX = -maxDragX;
         final minDragY = 0.0;
-        final maxDragY = math.max(0.0, screenH - topPadding - 180.0);
+        final maxDragY = math.max(0.0, screenH - topPadding - catH - 18.0);
+        final isNearBottom = vm.catYOffset > (maxDragY * 0.65);
+        final isLyingOnBottom = vm.catYOffset >= (maxDragY - 30.0);
 
         return Stack(
           children: [
             Positioned(
-              top: topPadding + 6 + vm.catYOffset,
+              top: topPadding + 4 + vm.catYOffset,
               left: 0,
               right: 0,
               child: Align(
@@ -122,70 +126,13 @@ class _CatStageWidgetState extends State<CatStageWidget>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Dynamic Island Perch Pill (rendered when hugging the top center)
-                      if (isPerchedOnIsland)
-                        Container(
-                          width: 124,
-                          height: 34,
-                          margin: const EdgeInsets.only(bottom: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.black,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: const Color(0xFF222834),
-                              width: 1,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.9),
-                                blurRadius: 10,
-                                offset: const Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.only(left: 10),
-                                child: Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    color: vm.isPatrolling
-                                        ? const Color(0xFF4ADE80)
-                                        : Colors.orangeAccent,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                vm.isPatrolling ? 'PATROL' : 'PAUSED',
-                                style: const TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF9AA8B4),
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: Text(
-                                  vm.focusSecondsRemaining > 0
-                                      ? vm.formatTime(vm.focusSecondsRemaining)
-                                      : '🐾',
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF4ADE80),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                      // When cat is near bottom of phone screen, speech bubble appears ABOVE cat
+                      if (isNearBottom) ...[
+                        _buildSpeechBubble(vm, pointerAtBottom: true),
+                        const SizedBox(height: 6),
+                      ],
 
-                      // Cat & Interactive Gestures
+                      // Cat & Interactive Gestures (completely free of any window or tab box)
                       GestureDetector(
                         onTap: () => _handleTap(context, vm),
                         onPanUpdate: (d) => vm.onCatDrag2D(
@@ -196,11 +143,28 @@ class _CatStageWidgetState extends State<CatStageWidget>
                           minY: minDragY,
                           maxY: maxDragY,
                         ),
-                        onPanEnd: (_) => vm.onCatDragEnd(),
+                        onPanEnd: (_) => vm.onCatDragEnd(maxY: maxDragY),
                         behavior: HitTestBehavior.opaque,
-                        child: SizedBox(
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
                           width: catW,
                           height: catH,
+                          decoration: BoxDecoration(
+                            boxShadow: [
+                              if (isLyingOnBottom || vm.pose == CatPose.sleep)
+                                BoxShadow(
+                                  color: Colors.amber.withValues(alpha: 0.20),
+                                  blurRadius: 18,
+                                  spreadRadius: 3,
+                                )
+                              else if (isPerchedOnIsland)
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.6),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 3),
+                                ),
+                            ],
+                          ),
                           child: AnimatedBuilder(
                             animation: Listenable.merge(
                                 [_animController, _swatController]),
@@ -224,112 +188,105 @@ class _CatStageWidgetState extends State<CatStageWidget>
                         ),
                       ),
 
-                      const SizedBox(height: 4),
+                      // When cat is at top or middle, speech bubble appears BELOW cat
+                      if (!isNearBottom) ...[
+                        const SizedBox(height: 6),
+                        _buildSpeechBubble(vm, pointerAtBottom: false),
+                      ],
 
-                      // Speech Bubble (placed right below cat)
-                      AnimatedSlide(
-                        offset:
-                            vm.isChatOpen ? Offset.zero : const Offset(0, 0.02),
-                        duration: const Duration(milliseconds: 250),
-                        curve: Curves.easeOutCubic,
-                        child: Column(
+                      // Floating Quick Chips when dragged away from perch
+                      if (!isPerchedOnIsland) ...[
+                        const SizedBox(height: 6),
+                        Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            // Pointer tail pointing UP towards cat
-                            Transform.rotate(
-                              angle: 45 * math.pi / 180,
+                            // Return to Island
+                            InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: () {
+                                HapticFeedback.lightImpact();
+                                vm.resetCatPosition();
+                              },
                               child: Container(
-                                width: 8,
-                                height: 8,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF12161F),
-                                  border: Border(
-                                    left: BorderSide(color: Color(0xFF2A3244)),
-                                    top: BorderSide(color: Color(0xFF2A3244)),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Transform.translate(
-                              offset: const Offset(0, -4),
-                              child: Container(
-                                constraints:
-                                    const BoxConstraints(maxWidth: 300),
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 6),
+                                    horizontal: 9, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF12161F),
-                                  borderRadius: BorderRadius.circular(12),
+                                  color: const Color(0xFF141A24)
+                                      .withValues(alpha: 0.95),
+                                  borderRadius: BorderRadius.circular(16),
                                   border: Border.all(
-                                      color: const Color(0xFF2A3244)),
+                                      color: const Color(0xFF38BDF8)),
                                   boxShadow: [
                                     BoxShadow(
-                                      color:
-                                          Colors.black.withValues(alpha: 0.8),
-                                      blurRadius: 14,
-                                      offset: const Offset(0, 6),
+                                      color: Colors.black
+                                          .withValues(alpha: 0.5),
+                                      blurRadius: 8,
                                     ),
                                   ],
                                 ),
-                                child: Text(
-                                  vm.speechBubble,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: Color(0xFFE8EAF0),
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w500,
-                                    letterSpacing: 0,
-                                    wordSpacing: 0,
-                                  ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(CupertinoIcons.arrow_up_to_line,
+                                        size: 11, color: Color(0xFF38BDF8)),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Island Perch 🏝️',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF38BDF8),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+
+                            // Lie Down on Phone
+                            InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: () {
+                                HapticFeedback.mediumImpact();
+                                vm.lieDownOnPhone(targetY: maxDragY);
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 9, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1E1705)
+                                      .withValues(alpha: 0.95),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                      color: const Color(0xFFFBBF24)),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black
+                                          .withValues(alpha: 0.5),
+                                      blurRadius: 8,
+                                    ),
+                                  ],
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(CupertinoIcons.bed_double_fill,
+                                        size: 11, color: Color(0xFFFBBF24)),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Lie on Phone 🐾',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFFFBBF24),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
                           ],
-                        ),
-                      ),
-
-                      // "Reset Cat Position (Return to Perch)" chip when dragged away
-                      if (!isPerchedOnIsland) ...[
-                        const SizedBox(height: 6),
-                        InkWell(
-                          borderRadius: BorderRadius.circular(16),
-                          onTap: () {
-                            HapticFeedback.lightImpact();
-                            vm.resetCatPosition();
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF141A24)
-                                  .withValues(alpha: 0.92),
-                              borderRadius: BorderRadius.circular(16),
-                              border:
-                                  Border.all(color: const Color(0xFF38BDF8)),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.5),
-                                  blurRadius: 8,
-                                ),
-                              ],
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(CupertinoIcons.arrow_up_to_line,
-                                    size: 11, color: Color(0xFF38BDF8)),
-                                SizedBox(width: 5),
-                                Text(
-                                  'Return Home Perch 🏝️',
-                                  style: TextStyle(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF38BDF8),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
                         ),
                       ],
                     ],
@@ -340,6 +297,81 @@ class _CatStageWidgetState extends State<CatStageWidget>
           ],
         );
       },
+    );
+  }
+
+  Widget _buildSpeechBubble(CatViewModel vm, {required bool pointerAtBottom}) {
+    return AnimatedSlide(
+      offset: vm.isChatOpen ? Offset.zero : const Offset(0, 0.02),
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!pointerAtBottom)
+            // Pointer tail pointing UP towards cat
+            Transform.rotate(
+              angle: 45 * math.pi / 180,
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF12161F),
+                  border: Border(
+                    left: BorderSide(color: Color(0xFF2A3244)),
+                    top: BorderSide(color: Color(0xFF2A3244)),
+                  ),
+                ),
+              ),
+            ),
+          Transform.translate(
+            offset: Offset(0, pointerAtBottom ? 4 : -4),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 300),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF12161F),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF2A3244)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.8),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Text(
+                vm.speechBubble,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Color(0xFFE8EAF0),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0,
+                  wordSpacing: 0,
+                ),
+              ),
+            ),
+          ),
+          if (pointerAtBottom)
+            // Pointer tail pointing DOWN towards cat
+            Transform.rotate(
+              angle: 45 * math.pi / 180,
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF12161F),
+                  border: Border(
+                    right: BorderSide(color: Color(0xFF2A3244)),
+                    bottom: BorderSide(color: Color(0xFF2A3244)),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

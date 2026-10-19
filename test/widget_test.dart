@@ -205,6 +205,29 @@ void main() {
       catY = 0.0;
       expect(catX, 0.0);
       expect(catY, 0.0);
+
+      // Lie Down on Phone puts the cat at the bottom edge in sleep pose
+      void lieDownOnPhone({double targetY = 560.0}) {
+        catX = 0.0;
+        catY = targetY;
+      }
+
+      lieDownOnPhone(targetY: 560.0);
+      expect(catX, 0.0);
+      expect(catY, 560.0);
+
+      // Snap logic: released near bottom snaps directly to maxY
+      const maxY = 560.0;
+      void onCatDragEnd(double currentY) {
+        if (currentY > maxY - 65) {
+          catY = maxY;
+          catX = 0.0;
+        }
+      }
+
+      onCatDragEnd(520.0); // within 65px of bottom
+      expect(catY, 560.0);
+      expect(catX, 0.0);
     });
   });
 

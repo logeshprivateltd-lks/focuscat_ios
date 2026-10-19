@@ -428,6 +428,26 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   void snapBackToDynamicIsland() => resetCatPosition();
 
+  /// Makes the cat step out of any frame and lie comfortably on the phone screen.
+  void lieDownOnPhone({double targetY = 560.0}) {
+    catXOffset = 0.0;
+    catYOffset = targetY;
+    pose = CatPose.sleep;
+    _sound.playPurr();
+    setSpeechBubble('Purrrrr... lying cozily on your phone screen! 🐾💤', speakAloud: true);
+    notifyListeners();
+    updateLiveActivity();
+  }
+
+  /// Lets the cat wander freely across the phone screen without window bounds.
+  void wanderOnPhone() {
+    pose = CatPose.walk;
+    wanderEnabled = true;
+    _sound.playChirp();
+    setSpeechBubble('Roaming freely across your screen! 🐾', speakAloud: true);
+    notifyListeners();
+  }
+
   void setSettingsOpen(bool open) {
     isSettingsOpen = open;
     notifyListeners();
@@ -755,14 +775,23 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  void onCatDragEnd() {
-    if (!isMoodLocked) {
-      pose = CatPose.sit;
-    }
+  void onCatDragEnd({double? maxY}) {
     // Snap back if released very close to top Dynamic Island
-    if (catYOffset.abs() < 40 && catXOffset.abs() < 50) {
+    if (catYOffset.abs() < 45 && catXOffset.abs() < 55) {
       catXOffset = 0.0;
       catYOffset = 0.0;
+      if (!isMoodLocked) pose = CatPose.sit;
+    } else if (maxY != null && catYOffset > maxY - 65) {
+      // Released near the bottom of phone screen -> lie down comfortably!
+      catXOffset = 0.0;
+      catYOffset = maxY;
+      if (!isMoodLocked) pose = CatPose.sleep;
+      _sound.playPurr();
+      setSpeechBubble('Purrrrr... lying comfortably on your phone! 🐾💤');
+    } else {
+      if (!isMoodLocked) {
+        pose = CatPose.sit;
+      }
     }
     notifyListeners();
   }

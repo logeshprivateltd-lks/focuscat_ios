@@ -97,16 +97,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildBottomHintBar(BuildContext context, CatViewModel vm) {
     return GestureDetector(
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        vm.lieDownOnPhone();
+      },
       onDoubleTap: () {
         HapticFeedback.lightImpact();
         vm.resetCatPosition();
       },
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: const Color(0xFF0A0D10),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: const Color(0xFF1C2630)),
         ),
         child: Row(
@@ -134,13 +138,13 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(width: 8),
             Flexible(
               child: Text(
-                'Dynamic Island Cat · Drag anywhere · Double-tap bar to reset · 1-tap purr · 2-tap chat',
+                '🐾 1-Tap: Lie on Phone · 2-Tap: Island Perch · Drag anywhere on screen',
                 textAlign: TextAlign.center,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.white.withValues(alpha: 0.70),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white.withValues(alpha: 0.85),
                 ),
               ),
             ),
