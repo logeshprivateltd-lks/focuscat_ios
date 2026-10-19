@@ -87,7 +87,6 @@ class _SettingsSheetContentState extends State<_SettingsSheetContent> {
               const Text(
                 'FocusCat Settings',
                 style: TextStyle(
-                  fontFamily: 'monospace',
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: Color(0xFFE6EDF3),
@@ -123,7 +122,6 @@ class _SettingsSheetContentState extends State<_SettingsSheetContent> {
                 const Text(
                   'Companion Greeting Name',
                   style: TextStyle(
-                    fontFamily: 'monospace',
                     fontSize: 11,
                     color: Color(0xFF9AA8B4),
                     fontWeight: FontWeight.w500,
@@ -133,7 +131,6 @@ class _SettingsSheetContentState extends State<_SettingsSheetContent> {
                 TextField(
                   controller: _nameController,
                   style: const TextStyle(
-                    fontFamily: 'monospace',
                     fontSize: 14,
                     color: Color(0xFFEEF1F6),
                   ),
@@ -261,7 +258,6 @@ class _SettingsSheetContentState extends State<_SettingsSheetContent> {
           const Text(
             'Watched Sites & Daily Limits',
             style: TextStyle(
-              fontFamily: 'monospace',
               fontSize: 13,
               fontWeight: FontWeight.bold,
               color: Color(0xFFE6EDF3),
@@ -287,7 +283,6 @@ class _SettingsSheetContentState extends State<_SettingsSheetContent> {
                       title: Text(
                         rule.domain,
                         style: const TextStyle(
-                          fontFamily: 'monospace',
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFFE6EDF3),
@@ -333,7 +328,6 @@ class _SettingsSheetContentState extends State<_SettingsSheetContent> {
           Text(
             'Saved Notes (${vm.notes.length})',
             style: const TextStyle(
-              fontFamily: 'monospace',
               fontSize: 13,
               fontWeight: FontWeight.bold,
               color: Color(0xFFE6EDF3),

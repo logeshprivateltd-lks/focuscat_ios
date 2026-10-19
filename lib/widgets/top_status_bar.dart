@@ -20,7 +20,6 @@ class TopStatusBar extends StatelessWidget {
         title: const Text(
           'FocusCat Tray Menu',
           style: TextStyle(
-            fontFamily: 'monospace',
             fontWeight: FontWeight.bold,
             letterSpacing: -0.2,
           ),
@@ -32,6 +31,21 @@ class TopStatusBar extends StatelessWidget {
           style: const TextStyle(fontSize: 13),
         ),
         actions: <CupertinoActionSheetAction>[
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              HapticFeedback.lightImpact();
+              vm.resetCatPosition();
+            },
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(CupertinoIcons.arrow_up_to_line, size: 18, color: Color(0xFF4ADE80)),
+                SizedBox(width: 8),
+                Text('Reset Cat Position (Return Home)'),
+              ],
+            ),
+          ),
           CupertinoActionSheetAction(
             onPressed: () {
               Navigator.pop(ctx);
@@ -119,8 +133,9 @@ class TopStatusBar extends StatelessWidget {
     final vm = context.watch<CatViewModel>();
 
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // Status pill
+        // Left Status pill: On patrol / Snoozed + timer
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
@@ -154,18 +169,16 @@ class TopStatusBar extends StatelessWidget {
               Text(
                 vm.isPatrolling ? 'On patrol' : 'Snoozed',
                 style: const TextStyle(
-                  fontFamily: 'monospace',
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: Color(0xFFE6EDF3),
                 ),
               ),
               if (vm.focusSecondsRemaining > 0) ...[
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 Text(
                   '· 🍅 ${vm.formatTime(vm.focusSecondsRemaining)}',
                   style: const TextStyle(
-                    fontFamily: 'monospace',
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFFFBBC24),
@@ -175,9 +188,11 @@ class TopStatusBar extends StatelessWidget {
             ],
           ),
         ),
-        const Spacer(),
 
-        // iOS Tray Action Sheet Trigger
+        // Clean central gap for Dynamic Island (120px minimum clearance)
+        const SizedBox(width: 120),
+
+        // Right: iOS Tray Action Sheet Trigger
         InkWell(
           borderRadius: BorderRadius.circular(20),
           onTap: () => _showTrayActionSheet(context, vm),
@@ -189,6 +204,7 @@ class TopStatusBar extends StatelessWidget {
               border: Border.all(color: const Color(0xFF2C3646)),
             ),
             child: const Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   CupertinoIcons.paw_solid,
@@ -199,7 +215,6 @@ class TopStatusBar extends StatelessWidget {
                 Text(
                   'Tray',
                   style: TextStyle(
-                    fontFamily: 'monospace',
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: Color(0xFFE6EDF3),

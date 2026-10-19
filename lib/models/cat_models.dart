@@ -84,23 +84,48 @@ class CatReminder {
   final String id;
   final String title;
   final String timeLabel;
+  final DateTime triggerAt;
+  bool isTriggered;
 
   CatReminder({
     required this.id,
     required this.title,
     required this.timeLabel,
-  });
+    DateTime? triggerAt,
+    this.isTriggered = false,
+  }) : triggerAt = triggerAt ?? DateTime.now().add(const Duration(minutes: 30));
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'title': title,
         'timeLabel': timeLabel,
+        'triggerAt': triggerAt.toIso8601String(),
+        'isTriggered': isTriggered,
       };
 
   factory CatReminder.fromJson(Map<String, dynamic> json) => CatReminder(
         id: json['id'] as String,
         title: json['title'] as String,
         timeLabel: json['timeLabel'] as String,
+        triggerAt: json['triggerAt'] != null
+            ? DateTime.tryParse(json['triggerAt'] as String)
+            : null,
+        isTriggered: (json['isTriggered'] as bool?) ?? false,
+      );
+
+  CatReminder copyWith({
+    String? id,
+    String? title,
+    String? timeLabel,
+    DateTime? triggerAt,
+    bool? isTriggered,
+  }) =>
+      CatReminder(
+        id: id ?? this.id,
+        title: title ?? this.title,
+        timeLabel: timeLabel ?? this.timeLabel,
+        triggerAt: triggerAt ?? this.triggerAt,
+        isTriggered: isTriggered ?? this.isTriggered,
       );
 }
 

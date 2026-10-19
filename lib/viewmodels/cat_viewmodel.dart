@@ -1,6 +1,7 @@
 // lib/viewmodels/cat_viewmodel.dart
 // Central ChangeNotifier ViewModel for FocusCat iOS v3.0.
-// Handles companion state, mood locking, 2D dragging, Screen Time app limits, and sounds.
+// Handles companion state, mood locking, 2D dragging, Screen Time app limits,
+// timestamp-based background timers, midnight resets, and interactive voice/SFX.
 
 import 'dart:async';
 import 'dart:math';
@@ -9,6 +10,7 @@ import 'package:flutter/material.dart';
 
 import '../models/cat_models.dart';
 import '../services/cat_sound_service.dart';
+import '../services/live_activity_service.dart';
 import '../services/notification_service.dart';
 import '../services/persistence_service.dart';
 import '../services/screen_time_service.dart';
@@ -24,6 +26,7 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
   final NotificationService _notifications = NotificationService();
   final CatSoundService _sound = CatSoundService.instance;
   final ScreenTimeService _screenTime = ScreenTimeService.instance;
+  final LiveActivityService _liveActivities = LiveActivityService.instance;
 
   ScreenTimeService get screenTime => _screenTime;
 
@@ -34,18 +37,18 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
   CatColorPalette catColor = CatColorPalette.cream;
   CatPose pose = CatPose.sit;
 
-  // Size and animation speed controls (from user screenshot)
+  // Size and animation speed controls
   double catScale = 0.85; // 0.50x to 1.60x
   double animSpeed = 0.80; // 0.30x to 2.00x
 
-  // 2D position for dragging across entire screen and outside tabs
+  // 2D position: (0, 0) is default Dynamic Island perch
   double catXOffset = 0.0;
   double catYOffset = 0.0;
   bool facingRight = true;
   bool isHidden = false;
   bool isPatrolling = true;
 
-  // Controls from user screenshot
+  // Controls
   bool wanderEnabled = true;
   bool followFinger = false;
   bool dozeOffBetweenWanders = true;
@@ -56,9 +59,15 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
   bool isMoodLocked = false;
   CatPose? lockedPose;
 
-  // Audio / Sound Options
+  // Audio / Sound / Voice Options
   bool soundEnabled = true;
+  bool voiceEnabled = true;
   double soundVolume = 0.8;
+
+  // Modals & Native Integrations
+  bool isSettingsOpen = false;
+  bool liveActivityEnabled = true;
+  bool pipEnabled = true;
 
   // -------------------------------------------------------------------------
   // Chat & Command Box
@@ -78,13 +87,17 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
   ];
 
   // -------------------------------------------------------------------------
-  // Timers & Data
+  // Timers & Data (Timestamp-based for background accuracy)
   // -------------------------------------------------------------------------
+  DateTime? focusEndTime;
+  DateTime? snoozeEndTime;
   int focusSecondsRemaining = 0;
   int snoozeSecondsRemaining = 0;
+
   List<CatNote> notes = [];
   List<CatReminder> reminders = [];
   List<String> closedTabsToday = ['youtube.com/shorts'];
+  String lastResetDate = '';
 
   // -------------------------------------------------------------------------
   // Apple Screen Time & Native App Limits (YouTube, Instagram, TikTok, etc.)
@@ -172,6 +185,22 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
   bool waterReminderEnabled = true;
   bool _isInitialized = false;
 
+  String get catEmoji {
+    switch (pose) {
+      case CatPose.sleep:
+        return '🐱💤';
+      case CatPose.pat:
+        return '😻';
+      case CatPose.greet:
+        return '😸';
+      case CatPose.angry:
+      case CatPose.confront:
+        return '😾';
+      default:
+        return '🐾';
+    }
+  }
+
   // -------------------------------------------------------------------------
   // Init / Dispose
   // -------------------------------------------------------------------------
@@ -181,7 +210,10 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
     WidgetsBinding.instance.addObserver(this);
     await _notifications.init();
+    await _sound.init();
+    await _liveActivities.init();
     await _loadPersistedData();
+    _checkMidnightReset();
 
     if (waterReminderEnabled) {
       await _notifications.startHourlyWaterReminder();
@@ -204,6 +236,179 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     isAppInForeground = (state == AppLifecycleState.resumed);
+    if (isAppInForeground) {
+      _checkMidnightReset();
+      // Recalculate remaining seconds dynamically from end timestamps
+      if (focusEndTime != null) {
+        final diff = focusEndTime!.difference(DateTime.now()).inSeconds;
+        focusSecondsRemaining = max(0, diff);
+        if (focusSecondsRemaining == 0) {
+          focusEndTime = null;
+          if (!isMoodLocked) pose = CatPose.greet;
+          _sound.playTimerChime();
+          setSpeechBubble(
+            'Focus session complete! 🔔 Take a short break & drink water 💧',
+          );
+          _notifications.showFocusComplete();
+        }
+      }
+
+      if (snoozeEndTime != null) {
+        final diff = snoozeEndTime!.difference(DateTime.now()).inSeconds;
+        snoozeSecondsRemaining = max(0, diff);
+        if (snoozeSecondsRemaining == 0) {
+          snoozeEndTime = null;
+          isPatrolling = true;
+          if (!isMoodLocked) pose = CatPose.sit;
+          setSpeechBubble('Snooze finished! Back on patrol. 👀');
+          _sound.playMeow();
+        }
+      }
+    }
+    updateLiveActivity();
+    notifyListeners();
+  }
+
+  // -------------------------------------------------------------------------
+  // Midnight Quota Reset
+  // -------------------------------------------------------------------------
+  void _checkMidnightReset() {
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    if (lastResetDate.isNotEmpty && lastResetDate != today) {
+      debugPrint('[CatViewModel] Midnight reset! Resetting daily quotas.');
+      for (final site in watchedSites) {
+        site.secondsUsedToday = 0;
+      }
+      for (final app in screenTimeApps) {
+        app.secondsUsedToday = 0;
+        app.isBlocked = false;
+      }
+      closedTabsToday.clear();
+      lastResetDate = today;
+      _persistData();
+      notifyListeners();
+    } else if (lastResetDate.isEmpty) {
+      lastResetDate = today;
+      _persistData();
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Speech Bubble & Voice
+  // -------------------------------------------------------------------------
+  void setSpeechBubble(String text, {bool speakAloud = true}) {
+    speechBubble = text;
+    if (speakAloud && soundEnabled && voiceEnabled) {
+      _sound.speak(text);
+    }
+    updateLiveActivity();
+    notifyListeners();
+  }
+
+  // -------------------------------------------------------------------------
+  // Dynamic Island / Live Activity Update
+  // -------------------------------------------------------------------------
+  void updateLiveActivity({bool force = false}) {
+    if (!liveActivityEnabled && !force) return;
+    final activeRule = getActiveWatchedRule();
+    String target = '';
+    if (activeRule != null) {
+      target = activeRule.domain;
+    } else if (screenTimeApps.any((a) => a.isBlocked)) {
+      target = screenTimeApps.firstWhere((a) => a.isBlocked).appName;
+    }
+
+    String title = 'FocusCat';
+    int remSeconds = 0;
+    double? endTime;
+
+    if (focusEndTime != null) {
+      title = 'Focus Session';
+      remSeconds = focusSecondsRemaining;
+      endTime = focusEndTime!.millisecondsSinceEpoch / 1000.0;
+    } else if (snoozeEndTime != null) {
+      title = 'Snooze Patrol';
+      remSeconds = snoozeSecondsRemaining;
+      endTime = snoozeEndTime!.millisecondsSinceEpoch / 1000.0;
+    } else if (activeRule != null) {
+      title = 'Watched Tab';
+      remSeconds = activeRule.remainingSeconds;
+    }
+
+    _liveActivities.update(
+      catPose: pose.name,
+      catEmoji: catEmoji,
+      statusText: speechBubble,
+      title: title,
+      remainingSeconds: remSeconds,
+      endTimeTimestamp: endTime,
+      isPatrolling: isPatrolling,
+      targetAppOrDomain: target,
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Snap Back & Reset Cat Position to Home Perch
+  // -------------------------------------------------------------------------
+  void resetCatPosition() {
+    catXOffset = 0.0;
+    catYOffset = 0.0;
+    if (!isMoodLocked) pose = CatPose.sit;
+    _sound.playMeow();
+    setSpeechBubble('Back at my home perch! 🏝️', speakAloud: true);
+    notifyListeners();
+  }
+
+  void snapBackToDynamicIsland() => resetCatPosition();
+
+  void setSettingsOpen(bool open) {
+    isSettingsOpen = open;
+    notifyListeners();
+  }
+
+  void setLiveActivityEnabled(bool val) {
+    liveActivityEnabled = val;
+    notifyListeners();
+    _persistData();
+    if (val) {
+      updateLiveActivity(force: true);
+    } else {
+      _liveActivities.endActivity();
+    }
+  }
+
+  void setPipEnabled(bool val) {
+    pipEnabled = val;
+    notifyListeners();
+    _persistData();
+  }
+
+  // Focus Timer Presets (25m Pomodoro, 15m Break, 45m Deep Work)
+  void startFocusPreset(int minutes) {
+    focusEndTime = DateTime.now().add(Duration(minutes: minutes));
+    focusSecondsRemaining = minutes * 60;
+    isPatrolling = true;
+    _sound.playTimerChime();
+    setSpeechBubble('Started ${minutes}m focus session! 🍅 Let\'s get to work.', speakAloud: true);
+    _notifications.scheduleFocusTimer(minutes * 60);
+    updateLiveActivity(force: true);
+    notifyListeners();
+  }
+
+  void pauseFocusTimer() {
+    focusEndTime = null;
+    setSpeechBubble('Focus session paused. ⏸️', speakAloud: false);
+    _sound.playClick();
+    updateLiveActivity(force: true);
+    notifyListeners();
+  }
+
+  void resetFocusTimer() {
+    focusEndTime = null;
+    focusSecondsRemaining = 0;
+    setSpeechBubble('Focus session reset. ✨', speakAloud: false);
+    _sound.playClick();
+    updateLiveActivity(force: true);
     notifyListeners();
   }
 
@@ -211,31 +416,56 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
   // Heartbeat — 1-second tick
   // -------------------------------------------------------------------------
   void _onSecondTick() {
-    // 1. Focus session countdown
-    if (focusSecondsRemaining > 0) {
-      focusSecondsRemaining--;
+    _checkMidnightReset();
+
+    // 1. Focus session countdown (timestamp-based)
+    if (focusEndTime != null) {
+      final diff = focusEndTime!.difference(DateTime.now()).inSeconds;
+      focusSecondsRemaining = max(0, diff);
       if (focusSecondsRemaining == 0) {
+        focusEndTime = null;
         if (!isMoodLocked) pose = CatPose.greet;
         _sound.playTimerChime();
-        speechBubble =
-            'Focus session complete! 🔔 Take a short break & drink water 💧';
+        setSpeechBubble(
+          'Focus session complete! 🔔 Take a short break & drink water 💧',
+        );
         _notifications.showFocusComplete();
+        updateLiveActivity();
       }
+    } else {
+      focusSecondsRemaining = 0;
     }
 
-    // 2. Snooze countdown
-    if (snoozeSecondsRemaining > 0) {
-      snoozeSecondsRemaining--;
+    // 2. Snooze countdown (timestamp-based)
+    if (snoozeEndTime != null) {
+      final diff = snoozeEndTime!.difference(DateTime.now()).inSeconds;
+      snoozeSecondsRemaining = max(0, diff);
       if (snoozeSecondsRemaining == 0) {
+        snoozeEndTime = null;
         isPatrolling = true;
         if (!isMoodLocked) pose = CatPose.sit;
-        speechBubble = 'Snooze finished! Back on patrol. 👀';
+        setSpeechBubble('Snooze finished! Back on patrol. 👀');
         _sound.playMeow();
         _notifications.showSnoozeEnded();
+        updateLiveActivity();
+      }
+    } else {
+      snoozeSecondsRemaining = 0;
+    }
+
+    // 3. Active reminder evaluation
+    final now = DateTime.now();
+    for (final rem in reminders) {
+      if (!rem.isTriggered && now.isAfter(rem.triggerAt)) {
+        rem.isTriggered = true;
+        if (!isMoodLocked) pose = CatPose.greet;
+        _sound.playTimerChime();
+        setSpeechBubble('Reminder: "${rem.title}"! ⏰');
+        _persistData();
       }
     }
 
-    // 3. In-App Watch & Close foreground tab countdown
+    // 4. In-App Watch & Close foreground tab countdown
     final activeRule = getActiveWatchedRule();
     if (isPatrolling &&
         snoozeSecondsRemaining == 0 &&
@@ -255,7 +485,7 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
       }
     }
 
-    // 4. Apple Screen Time active app countdown
+    // 5. Apple Screen Time active app countdown
     if (isPatrolling && isAppInForeground && !isSwattingInProgress) {
       for (final app in screenTimeApps) {
         if (app.dailyMinutes > 0 && app.remainingSeconds <= 0 && !app.isBlocked) {
@@ -266,13 +496,11 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
       }
     }
 
-    // 5. Autonomous Cat Movement (Respects user's assigned mood!)
+    // 6. Autonomous Cat Movement (Respects user's assigned mood!)
     if (!isUserTyping && !isSwattingInProgress) {
       if (isMoodLocked && lockedPose != null) {
-        // Strict adherence to user's assigned mood
         pose = lockedPose!;
       } else {
-        // Natural wandering if wanderEnabled is true
         if (wanderEnabled) {
           if (_rng.nextInt(12) == 0 && dozeOffBetweenWanders) {
             pose = CatPose.sleep;
@@ -296,6 +524,7 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
       }
     }
 
+    updateLiveActivity();
     notifyListeners();
   }
 
@@ -306,9 +535,8 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
     if (isSwattingInProgress) return;
     isSwattingInProgress = true;
     pose = CatPose.confront;
-    speechBubble = 'Daily limit reached for ${rule.domain}! Swatting! 🐾';
+    setSpeechBubble('Daily limit reached for ${rule.domain}! Swatting! 🐾');
     _sound.playSwat();
-    notifyListeners();
 
     Future.delayed(const Duration(milliseconds: 650), () {
       if (activeTabIndex < browserTabs.length) {
@@ -321,8 +549,7 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
       isSwattingInProgress = false;
       pose = isMoodLocked && lockedPose != null ? lockedPose! : CatPose.sit;
       catXOffset = 0.0;
-      speechBubble =
-          'Swatted ${rule.domain} closed! Your other tabs stayed open. 🐾';
+      setSpeechBubble('Swatted ${rule.domain} closed! Your other tabs stayed open. 🐾');
       _notifications.showTabSwatted(rule.domain);
       _persistData();
       notifyListeners();
@@ -333,14 +560,13 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
     if (isSwattingInProgress) return;
     isSwattingInProgress = true;
     pose = CatPose.confront;
-    speechBubble = 'Daily Screen Time limit for ${app.appName} hit! Shielding! 😼';
+    setSpeechBubble('Daily Screen Time limit for ${app.appName} hit! Shielding! 😼');
     _sound.playSwat();
-    notifyListeners();
 
     Future.delayed(const Duration(milliseconds: 700), () {
       isSwattingInProgress = false;
       pose = isMoodLocked && lockedPose != null ? lockedPose! : CatPose.sit;
-      speechBubble = 'Shielded ${app.appName} via Screen Time! Great focus 🎉';
+      setSpeechBubble('Shielded ${app.appName} via Screen Time! Great focus 🎉');
       closedTabsToday.insert(0, '${app.appName} (Screen Time)');
       _notifications.showTabSwatted(app.appName);
       _persistData();
@@ -348,13 +574,31 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
     });
   }
 
+  /// Strict Host + Path URL Matching (prevents false-positive swats from query parameters)
   WatchedSiteRule? getActiveWatchedRule() {
     if (browserTabs.isEmpty || activeTabIndex >= browserTabs.length) {
       return null;
     }
-    final currentUrl = browserTabs[activeTabIndex].url.toLowerCase();
+    final currentUrl = browserTabs[activeTabIndex].url.trim();
+    final uri = Uri.tryParse(currentUrl);
+    if (uri == null || uri.host.isEmpty) {
+      return null;
+    }
+    final host = uri.host.toLowerCase();
+    final path = uri.path.toLowerCase();
+
     for (final rule in watchedSites) {
-      if (currentUrl.contains(rule.domain.toLowerCase())) {
+      final domainParts = rule.domain.toLowerCase().split('/');
+      final ruleHost = domainParts.first;
+      final rulePath =
+          domainParts.length > 1 ? '/${domainParts.sublist(1).join('/')}' : '';
+
+      final hostMatches = host == ruleHost || host.endsWith('.$ruleHost');
+      if (!hostMatches) continue;
+
+      if (rulePath.isNotEmpty) {
+        if (path.startsWith(rulePath)) return rule;
+      } else {
         return rule;
       }
     }
@@ -406,8 +650,7 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
     if (!isMoodLocked) {
       pose = CatPose.pat;
     }
-    speechBubble = 'Purrrrr... ♥';
-    notifyListeners();
+    setSpeechBubble('Purrrrr... ♥', speakAloud: false);
   }
 
   void onCatDoubleTap() {
@@ -415,9 +658,10 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
     isChatOpen = !isChatOpen;
     if (isChatOpen) {
       if (!isMoodLocked) pose = CatPose.greet;
-      speechBubble = 'Hi $userName! Ask me anything or jot a note.';
+      setSpeechBubble('Hi $userName! Ask me anything or jot a note.');
+    } else {
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   /// Triple-tap opens the full Desktop Settings / Control Center window!
@@ -426,10 +670,17 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
     MainSettingsWindow.show(context);
   }
 
-  /// Free 2D Dragging across the entire screen and outside the tab!
-  void onCatDrag2D(double dx, double dy) {
-    catXOffset = (catXOffset + dx).clamp(-500.0, 500.0);
-    catYOffset = (catYOffset + dy).clamp(-850.0, 250.0);
+  /// Free 2D Dragging bounded strictly within safe area boundaries
+  void onCatDrag2D(
+    double dx,
+    double dy, {
+    double minX = -160.0,
+    double maxX = 160.0,
+    double minY = 0.0,
+    double maxY = 650.0,
+  }) {
+    catXOffset = (catXOffset + dx).clamp(minX, maxX);
+    catYOffset = (catYOffset + dy).clamp(minY, maxY);
     facingRight = dx >= 0;
     if (!isMoodLocked) {
       pose = CatPose.walk;
@@ -440,6 +691,11 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
   void onCatDragEnd() {
     if (!isMoodLocked) {
       pose = CatPose.sit;
+    }
+    // Snap back if released very close to top Dynamic Island
+    if (catYOffset.abs() < 40 && catXOffset.abs() < 50) {
+      catXOffset = 0.0;
+      catYOffset = 0.0;
     }
     notifyListeners();
   }
@@ -508,12 +764,13 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
   void setPose(CatPose p, [String? bubble]) {
     pose = p;
     lockedPose = p;
-    isMoodLocked = true; // Once user assigns a mood, lock it!
+    isMoodLocked = true;
     if (bubble != null) {
-      speechBubble = bubble;
+      setSpeechBubble(bubble);
+    } else {
+      _sound.playClick();
+      notifyListeners();
     }
-    _sound.playClick();
-    notifyListeners();
     _persistData();
   }
 
@@ -527,6 +784,13 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
   void setSoundEnabled(bool val) {
     soundEnabled = val;
     _sound.soundEnabled = val;
+    notifyListeners();
+    _persistData();
+  }
+
+  void setVoiceEnabled(bool val) {
+    voiceEnabled = val;
+    _sound.voiceEnabled = val;
     notifyListeners();
     _persistData();
   }
@@ -545,20 +809,26 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _persistData();
   }
 
+  /// Preserves secondsUsedToday and persists immediately
   void updateWatchedSiteMinutes(WatchedSiteRule rule, int deltaMinutes) {
     final newMin = max(0, rule.dailyMinutes + deltaMinutes);
     final idx = watchedSites.indexOf(rule);
     if (idx != -1) {
-      watchedSites[idx] = rule.copyWith(dailyMinutes: newMin);
+      watchedSites[idx] = rule.copyWith(
+        dailyMinutes: newMin,
+        secondsUsedToday: rule.secondsUsedToday,
+      );
       _sound.playClick();
+      _persistData();
       notifyListeners();
     }
   }
 
   void togglePatrol() {
     isPatrolling = !isPatrolling;
-    speechBubble = isPatrolling ? 'Back on patrol! 👀' : 'Patrol paused.';
+    setSpeechBubble(isPatrolling ? 'Back on patrol! 👀' : 'Patrol paused.');
     _sound.playClick();
+    updateLiveActivity();
     notifyListeners();
   }
 
@@ -588,11 +858,13 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void snooze30() {
+    snoozeEndTime = DateTime.now().add(const Duration(minutes: 30));
     snoozeSecondsRemaining = 30 * 60;
     isPatrolling = false;
     if (!isMoodLocked) pose = CatPose.sleep;
-    speechBubble = 'Snoozing site patrol for 30 min. 😴';
+    setSpeechBubble('Snoozing site patrol for 30 min. 😴');
     _sound.playMeow();
+    updateLiveActivity();
     notifyListeners();
   }
 
@@ -602,30 +874,28 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
     final savedLockedPose = lockedPose;
     isMoodLocked = false;
 
-    speechBubble = 'Hi! Watch what I can do. 🐾';
+    setSpeechBubble('Hi! Watch what I can do. 🐾');
     pose = CatPose.greet;
     _sound.playMeow();
-    notifyListeners();
     await Future.delayed(const Duration(milliseconds: 1800));
 
-    speechBubble = 'I walk and patrol your screen...';
+    setSpeechBubble('I walk and patrol your screen...');
     pose = CatPose.walk;
     facingRight = true;
     notifyListeners();
     await Future.delayed(const Duration(milliseconds: 2000));
 
-    speechBubble = 'When petted, I purr! ♥';
+    setSpeechBubble('When petted, I purr! ♥');
     pose = CatPose.pat;
     _sound.playPurr();
-    notifyListeners();
     await Future.delayed(const Duration(milliseconds: 1800));
 
-    speechBubble = 'Distracting site spotted!';
+    setSpeechBubble('Distracting site spotted!');
     pose = CatPose.confront;
     notifyListeners();
     await Future.delayed(const Duration(milliseconds: 1500));
 
-    speechBubble = 'And I nap when you snooze. Zzz...';
+    setSpeechBubble('And I nap when you snooze. Zzz...');
     pose = CatPose.sleep;
     notifyListeners();
     await Future.delayed(const Duration(milliseconds: 2000));
@@ -633,8 +903,7 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
     isMoodLocked = savedMoodLock;
     lockedPose = savedLockedPose;
     pose = isMoodLocked && lockedPose != null ? lockedPose! : CatPose.sit;
-    speechBubble = 'Double-tap to chat · Triple-tap for Settings!';
-    notifyListeners();
+    setSpeechBubble('Double-tap to chat · Triple-tap for Settings!', speakAloud: false);
   }
 
   // -------------------------------------------------------------------------
@@ -657,23 +926,25 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
     if (lower.startsWith('/timer')) {
       final mins = _extractFirstInt(lower) ?? 25;
       final seconds = max(1, mins) * 60;
+      focusEndTime = DateTime.now().add(Duration(seconds: seconds));
       focusSecondsRemaining = seconds;
       if (!isMoodLocked) pose = CatPose.sit;
-      speechBubble = 'Started a $mins-minute focus session! Let\'s work. 🐾';
+      setSpeechBubble('Started a $mins-minute focus session! Let\'s work. 🐾');
       _notifications.scheduleFocusTimer(seconds);
       _sound.playClick();
-      notifyListeners();
+      updateLiveActivity();
       return;
     }
 
     if (lower.startsWith('/snooze')) {
       final mins = _extractFirstInt(lower) ?? 30;
+      snoozeEndTime = DateTime.now().add(Duration(minutes: mins));
       snoozeSecondsRemaining = mins * 60;
       isPatrolling = false;
       if (!isMoodLocked) pose = CatPose.sleep;
-      speechBubble = 'Snoozing site patrol for $mins min. 😴';
+      setSpeechBubble('Snoozing site patrol for $mins min. 😴');
       _sound.playMeow();
-      notifyListeners();
+      updateLiveActivity();
       return;
     }
 
@@ -683,8 +954,7 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     if (lower == '/hide') {
-      speechBubble = 'Hiding! Use the Tray menu to bring me back.';
-      notifyListeners();
+      setSpeechBubble('Hiding! Use the Tray menu to bring me back.');
       await Future.delayed(const Duration(milliseconds: 1100));
       isHidden = true;
       isChatOpen = false;
@@ -694,69 +964,64 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
     if (const ['hi', 'hello', 'hey', 'hi!', 'hello!'].contains(lower)) {
       if (!isMoodLocked) pose = CatPose.greet;
-      speechBubble = 'Meow! Hi $userName! Ready to focus?';
+      setSpeechBubble('Meow! Hi $userName! Ready to focus?');
       _sound.playMeow();
-      notifyListeners();
       return;
     }
 
     if (lower == 'help' || lower == 'help?') {
-      speechBubble =
-          'Ask: battery? memory? cpu? internet? weather? timer? closed today? | /timer 25, /snooze 30, /remind … | Triple-tap cat for Settings!';
-      notifyListeners();
+      setSpeechBubble(
+        'Ask: battery? memory? cpu? internet? weather? timer? closed today? | /timer 25, /snooze 30, /remind … | Triple-tap cat for Settings!',
+      );
       return;
     }
 
     if (lower.startsWith('battery')) {
       final report = await _telemetry.getBatteryReport();
       if (!isMoodLocked) pose = CatPose.sit;
-      speechBubble = report;
-      notifyListeners();
+      setSpeechBubble(report);
       return;
     }
 
     if (lower.startsWith('memory')) {
       if (!isMoodLocked) pose = CatPose.sit;
-      speechBubble = _telemetry.getMemoryReport();
-      notifyListeners();
+      setSpeechBubble(_telemetry.getMemoryReport());
       return;
     }
 
     if (lower.startsWith('cpu')) {
       if (!isMoodLocked) pose = CatPose.sit;
-      speechBubble = _telemetry.getCpuReport();
-      notifyListeners();
+      setSpeechBubble(_telemetry.getCpuReport());
       return;
     }
 
     if (lower.startsWith('internet')) {
       final report = await _telemetry.getInternetReport();
       if (!isMoodLocked) pose = CatPose.sit;
-      speechBubble = report;
-      notifyListeners();
+      setSpeechBubble(report);
       return;
     }
 
     if (lower.contains('closed today') || lower.contains('what did i close')) {
       if (closedTabsToday.isEmpty) {
-        speechBubble = 'Zero tabs swatted today! Great focus 🎉';
+        setSpeechBubble('Zero tabs swatted today! Great focus 🎉');
       } else {
         if (!isMoodLocked) pose = CatPose.confront;
-        speechBubble =
-            'Swatted ${closedTabsToday.length} tab(s) today: ${closedTabsToday.join(", ")}';
+        setSpeechBubble(
+          'Swatted ${closedTabsToday.length} tab(s) today: ${closedTabsToday.join(", ")}',
+        );
       }
-      notifyListeners();
       return;
     }
 
     if (lower == 'timer?' || lower == 'timer') {
       if (focusSecondsRemaining > 0) {
-        speechBubble =
-            'Focus timer running: ${formatTime(focusSecondsRemaining)} left! 🍅';
+        setSpeechBubble(
+          'Focus timer running: ${formatTime(focusSecondsRemaining)} left! 🍅',
+        );
       } else {
-        speechBubble = 'No focus timer running. Type /timer 25 to start one!';
+        setSpeechBubble('No focus timer running. Type /timer 25 to start one!');
       }
-      notifyListeners();
       return;
     }
 
@@ -768,11 +1033,9 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
             raw.substring(idx + 'weather in '.length).replaceAll('?', '').trim();
         if (extracted.isNotEmpty) city = extracted;
       }
-      speechBubble = 'Sniffing the wind in $city... 🐾';
-      notifyListeners();
+      setSpeechBubble('Sniffing the wind in $city... 🐾');
       final weatherText = await _telemetry.fetchWeather(city);
-      speechBubble = weatherText;
-      notifyListeners();
+      setSpeechBubble(weatherText);
       return;
     }
 
@@ -790,9 +1053,8 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
     );
     notes.insert(0, note);
     if (!isMoodLocked) pose = CatPose.pat;
-    speechBubble = 'Saved note: "$text" 📝';
+    setSpeechBubble('Saved note: "$text" 📝');
     _sound.playClick();
-    notifyListeners();
     _persistData();
   }
 
@@ -807,7 +1069,7 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
     final body =
         rawCommand.replaceFirst(RegExp(r'^/remind\s+', caseSensitive: false), '');
     String title = body;
-    String timeLabel = 'Soon';
+    String timeLabel = 'in 30 minutes';
 
     final atMatch =
         RegExp(r'\bat\s+(.+)$', caseSensitive: false).firstMatch(body);
@@ -817,23 +1079,25 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     final resolvedTitle = title.isEmpty ? body : title;
+    final triggerAt = _notifications.parseTimeString(timeLabel);
+
     final rem = CatReminder(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       title: resolvedTitle,
       timeLabel: timeLabel,
+      triggerAt: triggerAt,
+      isTriggered: false,
     );
     reminders.insert(0, rem);
     if (!isMoodLocked) pose = CatPose.greet;
-    speechBubble = 'Reminder set: "${rem.title}" ($timeLabel) ⏰';
+    setSpeechBubble('Reminder set: "${rem.title}" ($timeLabel) ⏰');
     _sound.playClick();
-    notifyListeners();
     _persistData();
 
-    _notifications
-        .scheduleReminder(title: resolvedTitle, rawTimeString: timeLabel)
-        .then((fireAt) {
-      debugPrint('[CatViewModel] Reminder "$resolvedTitle" will fire at $fireAt');
-    });
+    _notifications.scheduleReminder(
+      title: resolvedTitle,
+      rawTimeString: timeLabel,
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -875,8 +1139,23 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
     soundEnabled = (data['soundEnabled'] as bool?) ?? true;
     soundVolume = (data['soundVolume'] as double?) ?? 0.8;
+    voiceEnabled = (data['voiceEnabled'] as bool?) ?? true;
+    liveActivityEnabled = (data['liveActivityEnabled'] as bool?) ?? true;
+    pipEnabled = (data['pipEnabled'] as bool?) ?? true;
     _sound.soundEnabled = soundEnabled;
     _sound.volume = soundVolume;
+    _sound.voiceEnabled = voiceEnabled;
+
+    lastResetDate = (data['lastResetDate'] as String?) ?? '';
+    final loadedClosed = data['closedTabsToday'] as List<String>?;
+    if (loadedClosed != null && loadedClosed.isNotEmpty) {
+      closedTabsToday = loadedClosed;
+    }
+
+    final loadedSites = data['watchedSites'] as List<WatchedSiteRule>?;
+    if (loadedSites != null && loadedSites.isNotEmpty) {
+      watchedSites = loadedSites;
+    }
 
     final loadedApps = data['screenTimeApps'] as List<ScreenTimeAppRule>?;
     if (loadedApps != null && loadedApps.isNotEmpty) {
@@ -902,7 +1181,13 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
       lockedPose: lockedPose,
       soundEnabled: soundEnabled,
       soundVolume: soundVolume,
+      voiceEnabled: voiceEnabled,
+      liveActivityEnabled: liveActivityEnabled,
+      pipEnabled: pipEnabled,
       screenTimeApps: screenTimeApps,
+      watchedSites: watchedSites,
+      closedTabsToday: closedTabsToday,
+      lastResetDate: lastResetDate,
     );
   }
 }

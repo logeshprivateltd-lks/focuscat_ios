@@ -67,7 +67,6 @@ class ChatCommandBox extends StatelessWidget {
                             child: Text(
                               chip,
                               style: const TextStyle(
-                                fontFamily: 'monospace',
                                 fontSize: 11,
                                 color: Color(0xFF9AA8B4),
                                 fontWeight: FontWeight.w500,
@@ -85,14 +84,12 @@ class ChatCommandBox extends StatelessWidget {
                 TextField(
                   controller: vm.chatController,
                   style: const TextStyle(
-                    fontFamily: 'monospace',
                     fontSize: 13,
                     color: Color(0xFFEEF1F6),
                   ),
                   decoration: InputDecoration(
                     hintText: 'Write a note, or ask me something…',
                     hintStyle: TextStyle(
-                      fontFamily: 'monospace',
                       fontSize: 12,
                       color: Colors.white.withValues(alpha: 0.35),
                     ),
@@ -127,7 +124,6 @@ class ChatCommandBox extends StatelessWidget {
                     Text(
                       'Enter saves a note',
                       style: TextStyle(
-                        fontFamily: 'monospace',
                         fontSize: 10.5,
                         color: Colors.white.withValues(alpha: 0.40),
                       ),
@@ -188,7 +184,6 @@ class _MiniBtn extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(
-            fontFamily: 'monospace',
             fontSize: 11,
             fontWeight: FontWeight.bold,
             color: isPrimary ? const Color(0xFF04120A) : const Color(0xFFE6EDF3),

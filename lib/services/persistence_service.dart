@@ -22,7 +22,14 @@ class PersistenceService {
   static const _keyLockedPose = 'focuscat.lockedPose';
   static const _keySoundEnabled = 'focuscat.soundEnabled';
   static const _keySoundVolume = 'focuscat.soundVolume';
+  static const _keyVoiceEnabled = 'focuscat.voiceEnabled';
   static const _keyScreenTimeApps = 'focuscat.screenTimeApps';
+  static const _keyWatchedSites = 'focuscat.watchedSites';
+  static const _keyClosedTabsToday = 'focuscat.closedTabsToday';
+  static const _keyLastResetDate = 'focuscat.lastResetDate';
+  static const _keyLiveActivityEnabled = 'focuscat.liveActivityEnabled';
+  static const _keyPipEnabled = 'focuscat.pipEnabled';
+
 
   Future<Map<String, dynamic>> loadAll() async {
     final prefs = await SharedPreferences.getInstance();
@@ -59,6 +66,20 @@ class PersistenceService {
     );
     final soundEnabled = prefs.getBool(_keySoundEnabled) ?? true;
     final soundVolume = prefs.getDouble(_keySoundVolume) ?? 0.8;
+    final voiceEnabled = prefs.getBool(_keyVoiceEnabled) ?? true;
+    final liveActivityEnabled = prefs.getBool(_keyLiveActivityEnabled) ?? true;
+    final pipEnabled = prefs.getBool(_keyPipEnabled) ?? true;
+    final lastResetDate = prefs.getString(_keyLastResetDate) ?? '';
+    final closedTabsToday = prefs.getStringList(_keyClosedTabsToday) ?? ['youtube.com/shorts'];
+
+    final watchedSitesRaw = prefs.getStringList(_keyWatchedSites) ?? [];
+    List<WatchedSiteRule>? watchedSites;
+    if (watchedSitesRaw.isNotEmpty) {
+      watchedSites = watchedSitesRaw
+          .map((s) =>
+              WatchedSiteRule.fromJson(jsonDecode(s) as Map<String, dynamic>))
+          .toList();
+    }
 
     final screenTimeRaw = prefs.getStringList(_keyScreenTimeApps) ?? [];
     List<ScreenTimeAppRule> screenTimeApps = [];
@@ -84,7 +105,13 @@ class PersistenceService {
       'lockedPose': lockedPose,
       'soundEnabled': soundEnabled,
       'soundVolume': soundVolume,
+      'voiceEnabled': voiceEnabled,
+      'liveActivityEnabled': liveActivityEnabled,
+      'pipEnabled': pipEnabled,
       'screenTimeApps': screenTimeApps,
+      'watchedSites': watchedSites,
+      'closedTabsToday': closedTabsToday,
+      'lastResetDate': lastResetDate,
     };
   }
 
@@ -103,7 +130,13 @@ class PersistenceService {
     CatPose? lockedPose,
     bool? soundEnabled,
     double? soundVolume,
+    bool? voiceEnabled,
+    bool? liveActivityEnabled,
+    bool? pipEnabled,
     List<ScreenTimeAppRule>? screenTimeApps,
+    List<WatchedSiteRule>? watchedSites,
+    List<String>? closedTabsToday,
+    String? lastResetDate,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyUserName, userName);
@@ -143,11 +176,32 @@ class PersistenceService {
     if (soundVolume != null) {
       await prefs.setDouble(_keySoundVolume, soundVolume);
     }
+    if (voiceEnabled != null) {
+      await prefs.setBool(_keyVoiceEnabled, voiceEnabled);
+    }
+    if (liveActivityEnabled != null) {
+      await prefs.setBool(_keyLiveActivityEnabled, liveActivityEnabled);
+    }
+    if (pipEnabled != null) {
+      await prefs.setBool(_keyPipEnabled, pipEnabled);
+    }
     if (screenTimeApps != null) {
       await prefs.setStringList(
         _keyScreenTimeApps,
         screenTimeApps.map((a) => jsonEncode(a.toJson())).toList(),
       );
+    }
+    if (watchedSites != null) {
+      await prefs.setStringList(
+        _keyWatchedSites,
+        watchedSites.map((w) => jsonEncode(w.toJson())).toList(),
+      );
+    }
+    if (closedTabsToday != null) {
+      await prefs.setStringList(_keyClosedTabsToday, closedTabsToday);
+    }
+    if (lastResetDate != null) {
+      await prefs.setString(_keyLastResetDate, lastResetDate);
     }
   }
 }

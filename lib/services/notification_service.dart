@@ -324,6 +324,8 @@ class NotificationService {
     }
   }
 
+  DateTime parseTimeString(String raw) => _parseTimeString(raw);
+
   // -------------------------------------------------------------------------
   // Time string parser
   // Understands: "5pm", "17:00", "5:30pm", "in 2 hours", "in 45 minutes"

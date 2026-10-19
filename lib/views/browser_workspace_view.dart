@@ -1,7 +1,8 @@
 // lib/views/browser_workspace_view.dart
-// The full Watch-and-Close multi-tab browser workspace.
-// Supports native WebView on iOS/Android, with a graceful desktop preview fallback.
+// The Watch-and-Close multi-tab browser workspace.
+// Supports native per-tab WebViewController preservation via IndexedStack.
 
+import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -9,9 +10,6 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../models/cat_models.dart';
 import '../viewmodels/cat_viewmodel.dart';
-
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:io' show Platform;
 
 class BrowserWorkspaceView extends StatefulWidget {
   const BrowserWorkspaceView({super.key});
@@ -21,7 +19,7 @@ class BrowserWorkspaceView extends StatefulWidget {
 }
 
 class _BrowserWorkspaceViewState extends State<BrowserWorkspaceView> {
-  WebViewController? _webViewController;
+  final Map<String, WebViewController> _controllers = {};
   final TextEditingController _urlController = TextEditingController();
   bool _showUrlBar = false;
 
@@ -29,43 +27,48 @@ class _BrowserWorkspaceViewState extends State<BrowserWorkspaceView> {
       !kIsWeb && (Platform.isIOS || Platform.isAndroid);
 
   @override
-  void initState() {
-    super.initState();
-    _initWebView();
-  }
-
-  @override
   void dispose() {
     _urlController.dispose();
+    _controllers.clear();
     super.dispose();
   }
 
-  void _initWebView() {
-    if (!_supportsNativeWebView) return;
-    final vm = context.read<CatViewModel>();
-    if (vm.browserTabs.isEmpty) return;
-    final url = vm.browserTabs[vm.activeTabIndex].url;
-    _webViewController = WebViewController()
+  WebViewController _getOrCreateController(FocusBrowserTab tab, CatViewModel vm) {
+    if (_controllers.containsKey(tab.id)) {
+      return _controllers[tab.id]!;
+    }
+
+    final controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(NavigationDelegate(
         onUrlChange: (change) {
           if (change.url != null && mounted) {
-            vm.updateTabUrl(vm.activeTabIndex, change.url!);
-            _urlController.text = change.url!;
+            final tabIdx = vm.browserTabs.indexWhere((t) => t.id == tab.id);
+            if (tabIdx != -1) {
+              vm.updateTabUrl(tabIdx, change.url!);
+              if (tabIdx == vm.activeTabIndex) {
+                _urlController.text = change.url!;
+              }
+            }
           }
         },
       ))
-      ..loadRequest(Uri.parse(url));
-    _urlController.text = url;
+      ..loadRequest(Uri.parse(tab.url));
+
+    _controllers[tab.id] = controller;
+    return controller;
+  }
+
+  void _cleanupControllers(List<FocusBrowserTab> tabs) {
+    final activeIds = tabs.map((t) => t.id).toSet();
+    _controllers.removeWhere((id, _) => !activeIds.contains(id));
   }
 
   void _onTabSelected(int index) {
     final vm = context.read<CatViewModel>();
     vm.selectTab(index);
-    if (_supportsNativeWebView && vm.browserTabs.isNotEmpty) {
-      final url = vm.browserTabs[index].url;
-      _webViewController?.loadRequest(Uri.parse(url));
-      _urlController.text = url;
+    if (index < vm.browserTabs.length) {
+      _urlController.text = vm.browserTabs[index].url;
     }
   }
 
@@ -76,7 +79,10 @@ class _BrowserWorkspaceViewState extends State<BrowserWorkspaceView> {
     }
     final vm = context.read<CatViewModel>();
     vm.updateTabUrl(vm.activeTabIndex, url);
-    _webViewController?.loadRequest(Uri.parse(url));
+    if (_supportsNativeWebView && vm.browserTabs.isNotEmpty) {
+      final tab = vm.browserTabs[vm.activeTabIndex];
+      _getOrCreateController(tab, vm).loadRequest(Uri.parse(url));
+    }
     _urlController.text = url;
     setState(() => _showUrlBar = false);
   }
@@ -85,6 +91,7 @@ class _BrowserWorkspaceViewState extends State<BrowserWorkspaceView> {
   Widget build(BuildContext context) {
     final vm = context.watch<CatViewModel>();
     final activeRule = vm.getActiveWatchedRule();
+    _cleanupControllers(vm.browserTabs);
 
     return Container(
       decoration: BoxDecoration(
@@ -110,7 +117,7 @@ class _BrowserWorkspaceViewState extends State<BrowserWorkspaceView> {
           // Swat overlay
           if (vm.isSwattingInProgress) _buildSwatOverlay(),
 
-          // Viewport
+          // Viewport with per-tab IndexedStack
           Expanded(child: _buildViewport(vm, activeRule)),
         ],
       ),
@@ -155,8 +162,10 @@ class _BrowserWorkspaceViewState extends State<BrowserWorkspaceView> {
                           Text(
                             tab.title,
                             style: TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 11,
+                              fontSize: 11.5,
+                              fontWeight: isSelected
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
                               color: isSelected
                                   ? Colors.white
                                   : Colors.white54,
@@ -166,10 +175,11 @@ class _BrowserWorkspaceViewState extends State<BrowserWorkspaceView> {
                           GestureDetector(
                             onTap: () {
                               vm.closeTab(index);
-                              if (_supportsNativeWebView &&
-                                  vm.browserTabs.isNotEmpty) {
-                                _webViewController?.loadRequest(Uri.parse(
-                                    vm.browserTabs[vm.activeTabIndex].url));
+                              if (vm.browserTabs.isNotEmpty) {
+                                final safeIdx = vm.activeTabIndex.clamp(
+                                    0, vm.browserTabs.length - 1);
+                                _urlController.text =
+                                    vm.browserTabs[safeIdx].url;
                               }
                             },
                             child: const Icon(Icons.close,
@@ -201,15 +211,14 @@ class _BrowserWorkspaceViewState extends State<BrowserWorkspaceView> {
           TextButton.icon(
             onPressed: () {
               vm.reopenYouTubeShorts();
-              if (_supportsNativeWebView) {
-                _webViewController?.loadRequest(Uri.parse(
-                    vm.browserTabs[vm.activeTabIndex].url));
-              }
+              final safeIdx =
+                  vm.activeTabIndex.clamp(0, vm.browserTabs.length - 1);
+              _urlController.text = vm.browserTabs[safeIdx].url;
             },
             icon: const Icon(Icons.replay, size: 13),
             label: const Text(
               '▸ again',
-              style: TextStyle(fontFamily: 'monospace', fontSize: 11),
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -223,11 +232,10 @@ class _BrowserWorkspaceViewState extends State<BrowserWorkspaceView> {
       child: TextField(
         controller: _urlController,
         autofocus: true,
-        style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+        style: const TextStyle(fontSize: 12),
         decoration: InputDecoration(
           hintText: 'Enter URL (e.g. github.com)',
           hintStyle: TextStyle(
-            fontFamily: 'monospace',
             fontSize: 12,
             color: Colors.white.withValues(alpha: 0.4),
           ),
@@ -286,7 +294,7 @@ class _BrowserWorkspaceViewState extends State<BrowserWorkspaceView> {
   Widget _hudStat(String label, String value, Color valueColor) {
     return RichText(
       text: TextSpan(
-        style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+        style: const TextStyle(fontSize: 11),
         children: [
           TextSpan(
               text: '$label ',
@@ -318,7 +326,6 @@ class _BrowserWorkspaceViewState extends State<BrowserWorkspaceView> {
           'All tabs closed. Tap "▸ again" to open YouTube Shorts.',
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontFamily: 'monospace',
             fontSize: 12,
             color: Colors.white54,
           ),
@@ -326,17 +333,25 @@ class _BrowserWorkspaceViewState extends State<BrowserWorkspaceView> {
       );
     }
 
-    if (_supportsNativeWebView && _webViewController != null) {
+    if (_supportsNativeWebView) {
+      final activeIndex =
+          vm.activeTabIndex.clamp(0, vm.browserTabs.length - 1);
       return ClipRRect(
         borderRadius:
             const BorderRadius.vertical(bottom: Radius.circular(13)),
-        child: WebViewWidget(controller: _webViewController!),
+        child: IndexedStack(
+          index: activeIndex,
+          children: vm.browserTabs.map((tab) {
+            final controller = _getOrCreateController(tab, vm);
+            return WebViewWidget(controller: controller);
+          }).toList(),
+        ),
       );
     }
 
     // Desktop / web fallback preview
     return _DesktopTabPreview(
-      tab: vm.browserTabs[vm.activeTabIndex],
+      tab: vm.browserTabs[vm.activeTabIndex.clamp(0, vm.browserTabs.length - 1)],
       activeRule: activeRule,
     );
   }
@@ -374,7 +389,6 @@ class _DesktopTabPreview extends StatelessWidget {
             Text(
               tab.url,
               style: const TextStyle(
-                fontFamily: 'monospace',
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
               ),
@@ -386,7 +400,6 @@ class _DesktopTabPreview extends StatelessWidget {
                   : 'Unwatched work tab — FocusCat timer is paused while you work here.',
               textAlign: TextAlign.center,
               style: const TextStyle(
-                fontFamily: 'monospace',
                 fontSize: 11,
                 color: Colors.white54,
               ),

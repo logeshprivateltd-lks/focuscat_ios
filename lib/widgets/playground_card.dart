@@ -52,7 +52,6 @@ class PlaygroundCard extends StatelessWidget {
               const Text(
                 'try it yourself — the real FocusCat rig',
                 style: TextStyle(
-                  fontFamily: 'monospace',
                   fontSize: 11.5,
                   fontWeight: FontWeight.w600,
                   color: Color(0xFF4ADE80),
@@ -79,7 +78,6 @@ class PlaygroundCard extends StatelessWidget {
                   child: const Text(
                     '⚡ Test Swat',
                     style: TextStyle(
-                      fontFamily: 'monospace',
                       fontSize: 10.5,
                       color: Colors.redAccent,
                       fontWeight: FontWeight.bold,
@@ -150,7 +148,6 @@ class PlaygroundCard extends StatelessWidget {
                       child: Text(
                         p.name,
                         style: TextStyle(
-                          fontFamily: 'monospace',
                           fontSize: 11,
                           fontWeight:
                               selected ? FontWeight.w700 : FontWeight.w500,
@@ -173,7 +170,6 @@ class PlaygroundCard extends StatelessWidget {
               Text(
                 'coat: ',
                 style: TextStyle(
-                  fontFamily: 'monospace',
                   fontSize: 11,
                   color: Colors.white.withValues(alpha: 0.45),
                 ),
@@ -227,7 +223,6 @@ class PlaygroundCard extends StatelessWidget {
                           Text(
                             c.name,
                             style: TextStyle(
-                              fontFamily: 'monospace',
                               fontSize: 11,
                               fontWeight:
                                   selected ? FontWeight.bold : FontWeight.normal,

@@ -1,7 +1,7 @@
 name: focuscat_ios
 description: FocusCat — AI focus guardian & pixel-art companion for iOS.
 publish_to: 'none'
-version: 2.0.0+1
+version: 3.0.0+1
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -33,6 +33,16 @@ dependencies:
   # Timezone (required for scheduled notifications)
   timezone: ^0.9.4
 
+  # Audio & Voice
+  flutter_tts: ^4.2.5
+  audioplayers: ^6.8.1
+
+  # iOS Dynamic Island & Live Activities
+  live_activities: ^2.6.0
+
+  # iOS Icons
+  cupertino_icons: ^1.0.8
+
   # Utilities
   uuid: ^4.5.1
 
@@ -43,3 +53,4 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
