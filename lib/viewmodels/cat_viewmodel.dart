@@ -15,6 +15,7 @@ import '../services/notification_service.dart';
 import '../services/persistence_service.dart';
 import '../services/screen_time_service.dart';
 import '../services/telemetry_service.dart';
+import '../services/pip_service.dart';
 import '../services/widget_service.dart';
 import '../views/main_settings_window.dart';
 
@@ -151,6 +152,8 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
   // Browser / Watch-and-Close Workspace State
   // -------------------------------------------------------------------------
   bool isAppInForeground = true;
+  DateTime? appPausedAt;
+  String activeMonitoredApp = 'YouTube';
   bool isSwattingInProgress = false;
   int activeTabIndex = 1;
 
@@ -239,9 +242,50 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    isAppInForeground = (state == AppLifecycleState.resumed);
-    if (isAppInForeground) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      if (isAppInForeground) {
+        appPausedAt = DateTime.now();
+        _persistData();
+      }
+      isAppInForeground = false;
+    } else if (state == AppLifecycleState.resumed) {
+      isAppInForeground = true;
       _checkMidnightReset();
+
+      // STEP 4: Accumulate background time spent outside app on monitored apps/sites (e.g. YouTube)
+      if (appPausedAt != null && isPatrolling && snoozeSecondsRemaining == 0) {
+        final elapsedSeconds =
+            DateTime.now().difference(appPausedAt!).inSeconds;
+        if (elapsedSeconds > 0) {
+          debugPrint(
+              '[CatViewModel] Resumed after ${elapsedSeconds}s outside. Accumulating usage for $activeMonitoredApp.');
+          for (final app in screenTimeApps) {
+            if (app.appName == activeMonitoredApp || app.appName == 'YouTube') {
+              app.secondsUsedToday += elapsedSeconds;
+              if (app.dailyMinutes > 0 &&
+                  app.secondsUsedToday >= app.totalAllowedSeconds &&
+                  !app.isBlocked) {
+                app.isBlocked = true;
+                walkAndSwatNativeApp(app);
+              }
+            }
+          }
+          for (final site in watchedSites) {
+            if (site.domain.contains('youtube') ||
+                site.domain
+                    .toLowerCase()
+                    .contains(activeMonitoredApp.toLowerCase())) {
+              site.secondsUsedToday += elapsedSeconds;
+            }
+          }
+          _persistData();
+          updateHomeScreenWidget(force: true);
+        }
+      }
+      appPausedAt = null;
+
       // Recalculate remaining seconds dynamically from end timestamps
       if (focusEndTime != null) {
         final diff = focusEndTime!.difference(DateTime.now()).inSeconds;
@@ -268,9 +312,9 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
           _sound.playMeow();
         }
       }
+      updateLiveActivity(force: true);
+      notifyListeners();
     }
-    updateLiveActivity();
-    notifyListeners();
   }
 
   // -------------------------------------------------------------------------
@@ -455,6 +499,7 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   void setLiveActivityEnabled(bool val) {
     liveActivityEnabled = val;
+    _sound.playClick();
     notifyListeners();
     _persistData();
     if (val) {
@@ -466,6 +511,12 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   void setPipEnabled(bool val) {
     pipEnabled = val;
+    _sound.playClick();
+    if (val) {
+      PipService.instance.startPip();
+    } else {
+      PipService.instance.stopPip();
+    }
     notifyListeners();
     _persistData();
   }
@@ -552,34 +603,43 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
       }
     }
 
-    // 4. In-App Watch & Close foreground tab countdown
+    // 4. In-App Watch & Close foreground tab countdown & Screen Time usage accumulation
     final activeRule = getActiveWatchedRule();
-    if (isPatrolling &&
-        snoozeSecondsRemaining == 0 &&
-        isAppInForeground &&
-        !isSwattingInProgress &&
-        activeRule != null) {
-      if (activeRule.remainingSeconds <= 0) {
-        walkAndSwatActiveTab(activeRule);
-      } else {
-        activeRule.secondsUsedToday++;
-        if (activeRule.remainingSeconds <= 5 && !isMoodLocked) {
-          pose = CatPose.angry;
-        }
+    if (isPatrolling && snoozeSecondsRemaining == 0 && !isSwattingInProgress) {
+      if (activeRule != null && isAppInForeground) {
         if (activeRule.remainingSeconds <= 0) {
           walkAndSwatActiveTab(activeRule);
+        } else {
+          activeRule.secondsUsedToday++;
+          if (activeRule.remainingSeconds <= 5 && !isMoodLocked) {
+            pose = CatPose.angry;
+          }
+          if (activeRule.remainingSeconds <= 0) {
+            walkAndSwatActiveTab(activeRule);
+          }
         }
       }
-    }
 
-    // 5. Apple Screen Time active app countdown
-    if (isPatrolling && isAppInForeground && !isSwattingInProgress) {
+      // STEP 4: Real-time accumulation for active monitored app (YouTube)
       for (final app in screenTimeApps) {
-        if (app.dailyMinutes > 0 && app.remainingSeconds <= 0 && !app.isBlocked) {
-          app.isBlocked = true;
-          walkAndSwatNativeApp(app);
-          break;
+        if (app.appName == activeMonitoredApp ||
+            (activeRule == null && app.appName == 'YouTube')) {
+          if (!app.isBlocked) {
+            app.secondsUsedToday++;
+            if (app.dailyMinutes > 0 &&
+                app.secondsUsedToday >= app.totalAllowedSeconds) {
+              app.isBlocked = true;
+              walkAndSwatNativeApp(app);
+              break;
+            }
+          }
         }
+      }
+
+      // Persist usage periodically every 5 seconds so data is never lost or stale
+      if (DateTime.now().second % 5 == 0) {
+        _persistData();
+        updateHomeScreenWidget();
       }
     }
 
@@ -903,6 +963,13 @@ class CatViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _sound.playClick();
     notifyListeners();
     _persistData();
+  }
+
+  void setActiveMonitoredApp(String appName) {
+    activeMonitoredApp = appName;
+    updateHomeScreenWidget(force: true);
+    updateLiveActivity(force: true);
+    notifyListeners();
   }
 
   /// Preserves secondsUsedToday and persists immediately

@@ -12,7 +12,7 @@ class WidgetService {
   static final WidgetService instance = WidgetService._();
   factory WidgetService() => instance;
 
-  static const String appGroupId = 'group.com.focuscat.ios';
+  static const String appGroupId = 'group.com.lks.focuscat';
   static const String iOSWidgetName = 'FocusCatHomeScreenWidget';
   static const MethodChannel _widgetChannel = MethodChannel('com.focuscat.widget');
 

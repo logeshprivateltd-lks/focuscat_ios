@@ -117,7 +117,7 @@ class CatSoundService {
       HapticFeedback.selectionClick();
     });
     _purrWav ??= _generatePurrWav();
-    _playWav(_purrWav!);
+    _playAssetOrWav('purr', _purrWav!);
   }
 
   /// Double-tap (Chat / Greet): Cute Meow sound + light haptic
@@ -125,7 +125,7 @@ class CatSoundService {
     if (!soundEnabled) return;
     HapticFeedback.lightImpact();
     _meowWav ??= _generateMeowWav();
-    _playWav(_meowWav!);
+    _playAssetOrWav('meow', _meowWav!);
   }
 
   /// Cheerful cat chirp / "mrrp" greeting trill + light haptic
@@ -133,7 +133,7 @@ class CatSoundService {
     if (!soundEnabled) return;
     HapticFeedback.lightImpact();
     _chirpWav ??= _generateChirpWav();
-    _playWav(_chirpWav!);
+    _playAssetOrWav('chirp', _chirpWav!);
   }
 
   /// Curious kitten questioning "mew?" + soft haptic
@@ -141,7 +141,7 @@ class CatSoundService {
     if (!soundEnabled) return;
     HapticFeedback.selectionClick();
     _curiousMewWav ??= _generateCuriousMewWav();
-    _playWav(_curiousMewWav!);
+    _playAssetOrWav('meow', _curiousMewWav!);
   }
 
   /// Timer Complete / Water Reminder: Pleasant Bell Chime + Meow sound
@@ -149,7 +149,7 @@ class CatSoundService {
     if (!soundEnabled) return;
     HapticFeedback.heavyImpact();
     _chimeWav ??= _generateBellChimeWav();
-    _playWav(_chimeWav!);
+    _playAssetOrWav('chime', _chimeWav!);
   }
 
   /// Tab Swat (`confront` / `angry`): Quick Angry Meow / Swat sound + heavy impact
@@ -157,7 +157,7 @@ class CatSoundService {
     if (!soundEnabled) return;
     HapticFeedback.heavyImpact();
     _swatWav ??= _generateAngrySwatWav();
-    _playWav(_swatWav!);
+    _playAssetOrWav('swat', _swatWav!);
   }
 
   /// Refreshing water drop chime
@@ -165,7 +165,7 @@ class CatSoundService {
     if (!soundEnabled) return;
     HapticFeedback.lightImpact();
     _waterWav ??= _generateWaterDropWav();
-    _playWav(_waterWav!);
+    _playAssetOrWav('water', _waterWav!);
   }
 
   /// Subtle UI click
@@ -177,7 +177,7 @@ class CatSoundService {
   }
 
   // ---------------------------------------------------------------------------
-  // WAV Audio Synthesis & Playback
+  // Audio Asset Playback & Synthesis Fallback
   // ---------------------------------------------------------------------------
 
   void _precomputeSounds() {
@@ -191,12 +191,21 @@ class CatSoundService {
     _clickWav = _generateClickWav();
   }
 
+  Future<void> _playAssetOrWav(String assetName, Uint8List wavBytes) async {
+    try {
+      await _audioPlayer.setVolume(volume);
+      // Play local audio MP3 asset through iPhone physical speaker
+      await _audioPlayer.play(AssetSource('audio/$assetName.mp3'));
+    } catch (_) {
+      await _playWav(wavBytes);
+    }
+  }
+
   Future<void> _playWav(Uint8List wavBytes) async {
     try {
       await _audioPlayer.setVolume(volume);
       await _audioPlayer.play(BytesSource(wavBytes));
     } catch (e) {
-      // Graceful fallback to iOS system sounds if audio session is interrupted
       SystemSound.play(SystemSoundType.click);
     }
   }

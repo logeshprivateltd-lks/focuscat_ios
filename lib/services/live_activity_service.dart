@@ -19,7 +19,7 @@ class LiveActivityService {
   Future<void> init() async {
     if (_isInitialized || !_isSupportedPlatform) return;
     try {
-      await _liveActivities.init(appGroupId: 'group.com.example.focuscatIos');
+      await _liveActivities.init(appGroupId: 'group.com.lks.focuscat');
       _isInitialized = true;
       debugPrint('[LiveActivityService] Initialized successfully');
     } catch (e) {

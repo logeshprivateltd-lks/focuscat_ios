@@ -54,7 +54,7 @@ struct FocusCatTimelineProvider: TimelineProvider {
   typealias Entry = FocusCatEntry
 
   private func fetchEntry(for date: Date = Date()) -> FocusCatEntry {
-    let defaults = UserDefaults(suiteName: "group.com.focuscat.ios") ?? UserDefaults.standard
+    let defaults = UserDefaults(suiteName: "group.com.lks.focuscat") ?? UserDefaults.standard
 
     let pose = defaults.string(forKey: "catPose") ?? "sit"
     let emoji = defaults.string(forKey: "catEmoji") ?? "🐱"

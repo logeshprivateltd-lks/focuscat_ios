@@ -6,6 +6,7 @@
 import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:focuscat_ios/models/cat_models.dart';
+import 'package:focuscat_ios/services/widget_service.dart';
 
 void main() {
   group('FocusCat Models Test', () {
@@ -333,6 +334,39 @@ void main() {
       expect(getMood(CatPose.sit, true), 'Patrolling');
       expect(getMood(CatPose.sit, false), 'Chill');
     });
+
+    test('WidgetService uses standardized group.com.lks.focuscat App Group ID', () {
+      expect(WidgetService.appGroupId, 'group.com.lks.focuscat');
+    });
+
+    test('ScreenTimeAppRule accumulates YouTube usage time and blocks when quota is exceeded', () {
+      final youtubeRule = ScreenTimeAppRule(
+        appName: 'YouTube',
+        bundleId: 'com.google.ios.youtube',
+        urlScheme: 'youtube://',
+        icon: '▶️',
+        dailyMinutes: 20,
+        secondsUsedToday: 0,
+      );
+
+      expect(youtubeRule.totalAllowedSeconds, 1200); // 20m * 60s
+      expect(youtubeRule.remainingSeconds, 1200);
+      expect(youtubeRule.isBlocked, false);
+
+      // User spends 1 hour (3600 seconds) on YouTube outside the app
+      final appPausedAt = DateTime.now().subtract(const Duration(hours: 1));
+      final elapsedSeconds = DateTime.now().difference(appPausedAt).inSeconds;
+
+      youtubeRule.secondsUsedToday += elapsedSeconds;
+      if (youtubeRule.secondsUsedToday >= youtubeRule.totalAllowedSeconds) {
+        youtubeRule.isBlocked = true;
+      }
+
+      expect(youtubeRule.secondsUsedToday >= 3600, true);
+      expect(youtubeRule.remainingSeconds, 0);
+      expect(youtubeRule.isBlocked, true);
+    });
   });
 }
+
 

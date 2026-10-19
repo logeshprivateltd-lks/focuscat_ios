@@ -2,45 +2,51 @@ import ActivityKit
 import WidgetKit
 import SwiftUI
 
-public struct FocusCatLiveActivitiesAppAttributes: ActivityAttributes, Identifiable {
-  public typealias FocusCatLiveActivitiesAppStatus = ContentState
+public struct LiveActivitiesAppAttributes: ActivityAttributes, Identifiable {
+  public typealias LiveDeliveryData = ContentState
 
   public struct ContentState: Codable, Hashable {
-    public var catPose: String
-    public var catEmoji: String
-    public var statusText: String
-    public var title: String
-    public var remainingSeconds: Int
-    public var endTimeTimestamp: Double?
-    public var isPatrolling: Bool
-    public var targetAppOrDomain: String
-    
-    public init(
-      catPose: String = "sit",
-      catEmoji: String = "🐱",
-      statusText: String = "FocusCat is on patrol 🐾",
-      title: String = "Focus Session",
-      remainingSeconds: Int = 0,
-      endTimeTimestamp: Double? = nil,
-      isPatrolling: Bool = true,
-      targetAppOrDomain: String = ""
-    ) {
-      self.catPose = catPose
-      self.catEmoji = catEmoji
-      self.statusText = statusText
-      self.title = title
-      self.remainingSeconds = remainingSeconds
-      self.endTimeTimestamp = endTimeTimestamp
-      self.isPatrolling = isPatrolling
-      self.targetAppOrDomain = targetAppOrDomain
+    public var appGroupId: String?
+    public var updateId: Double?
+
+    public init(appGroupId: String? = nil, updateId: Double? = nil) {
+      self.appGroupId = appGroupId
+      self.updateId = updateId
     }
   }
 
-  public var id = UUID()
-  public var name: String
+  public var id: UUID
 
-  public init(name: String = "FocusCat") {
-    self.name = name
+  public init(id: UUID = UUID()) {
+    self.id = id
+  }
+}
+
+// Extracted payload helper from shared App Group UserDefaults
+struct FocusCatLiveState {
+  let catPose: String
+  let catEmoji: String
+  let statusText: String
+  let title: String
+  let remainingSeconds: Int
+  let endTimeTimestamp: Double?
+  let isPatrolling: Bool
+  let targetAppOrDomain: String
+
+  init(context: ActivityViewContext<LiveActivitiesAppAttributes>) {
+    let appGroup = context.state.appGroupId ?? "group.com.lks.focuscat"
+    let defaults = UserDefaults(suiteName: appGroup) ?? UserDefaults.standard
+    let prefix = "\(context.attributes.id)"
+
+    self.catPose = defaults.string(forKey: "\(prefix)_catPose") ?? defaults.string(forKey: "catPose") ?? "sit"
+    self.catEmoji = defaults.string(forKey: "\(prefix)_catEmoji") ?? defaults.string(forKey: "catEmoji") ?? "🐱"
+    self.statusText = defaults.string(forKey: "\(prefix)_statusText") ?? defaults.string(forKey: "statusText") ?? "FocusCat is on patrol 🐾"
+    self.title = defaults.string(forKey: "\(prefix)_title") ?? defaults.string(forKey: "title") ?? "Focus Session"
+    self.remainingSeconds = defaults.integer(forKey: "\(prefix)_remainingSeconds")
+    let end = defaults.double(forKey: "\(prefix)_endTimeTimestamp")
+    self.endTimeTimestamp = end > 0 ? end : nil
+    self.isPatrolling = defaults.object(forKey: "\(prefix)_isPatrolling") as? Bool ?? true
+    self.targetAppOrDomain = defaults.string(forKey: "\(prefix)_targetAppOrDomain") ?? defaults.string(forKey: "targetAppOrDomain") ?? ""
   }
 }
 
@@ -53,45 +59,46 @@ func formatSeconds(_ totalSeconds: Int) -> String {
 @available(iOS 16.1, *)
 struct FocusCatLiveActivityWidget: Widget {
   var body: some WidgetConfiguration {
-    ActivityConfiguration(for: FocusCatLiveActivitiesAppAttributes.self) { context in
+    ActivityConfiguration(for: LiveActivitiesAppAttributes.self) { context in
+      let state = FocusCatLiveState(context: context)
       // Lock screen banner UI
       HStack(spacing: 12) {
         ZStack {
           Circle()
             .fill(Color(red: 0.1, green: 0.14, blue: 0.2))
             .frame(width: 48, height: 48)
-          Text(context.state.catEmoji)
+          Text(state.catEmoji)
             .font(.system(size: 26))
         }
 
         VStack(alignment: .leading, spacing: 3) {
           HStack {
-            Text(context.state.title)
+            Text(state.title)
               .font(.system(size: 14, weight: .bold))
               .foregroundColor(.white)
             Spacer()
-            if let endTime = context.state.endTimeTimestamp, endTime > Date().timeIntervalSince1970 {
+            if let endTime = state.endTimeTimestamp, endTime > Date().timeIntervalSince1970 {
               Text(timerInterval: Date()...Date(timeIntervalSince1970: endTime), countsDown: true)
                 .font(.system(size: 15, weight: .bold, design: .monospaced))
                 .foregroundColor(Color(red: 0.29, green: 0.87, blue: 0.50))
-            } else if context.state.remainingSeconds > 0 {
-              Text(formatSeconds(context.state.remainingSeconds))
+            } else if state.remainingSeconds > 0 {
+              Text(formatSeconds(state.remainingSeconds))
                 .font(.system(size: 15, weight: .bold, design: .monospaced))
                 .foregroundColor(Color(red: 0.29, green: 0.87, blue: 0.50))
             }
           }
 
-          Text(context.state.statusText)
+          Text(state.statusText)
             .font(.system(size: 12))
             .foregroundColor(Color(white: 0.8))
             .lineLimit(1)
 
-          if !context.state.targetAppOrDomain.isEmpty {
+          if !state.targetAppOrDomain.isEmpty {
             HStack {
               Text("Shielding:")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(.secondary)
-              Text(context.state.targetAppOrDomain)
+              Text(state.targetAppOrDomain)
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .foregroundColor(Color(red: 0.98, green: 0.74, blue: 0.14))
             }
@@ -101,17 +108,18 @@ struct FocusCatLiveActivityWidget: Widget {
       .padding(14)
       .background(Color(red: 0.05, green: 0.07, blue: 0.1))
     } dynamicIsland: { context in
-      DynamicIsland {
+      let state = FocusCatLiveState(context: context)
+      return DynamicIsland {
         // Expanded View: When long-pressed / expanded
         DynamicIslandExpandedRegion(.leading) {
           HStack(spacing: 8) {
-            Text(context.state.catEmoji)
+            Text(state.catEmoji)
               .font(.system(size: 26))
             VStack(alignment: .leading, spacing: 2) {
               Text("FocusCat")
                 .font(.system(size: 13, weight: .bold))
                 .foregroundColor(.white)
-              Text(context.state.catPose.uppercased())
+              Text(state.catPose.uppercased())
                 .font(.system(size: 9, weight: .bold))
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
@@ -124,12 +132,12 @@ struct FocusCatLiveActivityWidget: Widget {
         }
         DynamicIslandExpandedRegion(.trailing) {
           VStack(alignment: .trailing, spacing: 2) {
-            if let endTime = context.state.endTimeTimestamp, endTime > Date().timeIntervalSince1970 {
+            if let endTime = state.endTimeTimestamp, endTime > Date().timeIntervalSince1970 {
               Text(timerInterval: Date()...Date(timeIntervalSince1970: endTime), countsDown: true)
                 .font(.system(size: 16, weight: .bold, design: .monospaced))
                 .foregroundColor(Color(red: 0.98, green: 0.74, blue: 0.14))
-            } else if context.state.remainingSeconds > 0 {
-              Text(formatSeconds(context.state.remainingSeconds))
+            } else if state.remainingSeconds > 0 {
+              Text(formatSeconds(state.remainingSeconds))
                 .font(.system(size: 16, weight: .bold, design: .monospaced))
                 .foregroundColor(.white)
             } else {
@@ -137,7 +145,7 @@ struct FocusCatLiveActivityWidget: Widget {
                 .font(.system(size: 12, weight: .bold))
                 .foregroundColor(Color(red: 0.29, green: 0.87, blue: 0.50))
             }
-            Text(context.state.isPatrolling ? "ON PATROL" : "SNOOZED")
+            Text(state.isPatrolling ? "ON PATROL" : "SNOOZED")
               .font(.system(size: 9, weight: .semibold))
               .foregroundColor(.secondary)
           }
@@ -148,13 +156,13 @@ struct FocusCatLiveActivityWidget: Widget {
             Image(systemName: "shield.fill")
               .foregroundColor(Color(red: 0.29, green: 0.87, blue: 0.50))
               .font(.system(size: 11))
-            Text(context.state.statusText)
+            Text(state.statusText)
               .font(.system(size: 12, weight: .medium))
               .foregroundColor(.white)
               .lineLimit(1)
             Spacer()
-            if !context.state.targetAppOrDomain.isEmpty {
-              Text(context.state.targetAppOrDomain)
+            if !state.targetAppOrDomain.isEmpty {
+              Text(state.targetAppOrDomain)
                 .font(.system(size: 11, design: .monospaced))
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
@@ -169,18 +177,18 @@ struct FocusCatLiveActivityWidget: Widget {
       } compactLeading: {
         // Compact Leading: Kawaii cat sprite / emoji + pose
         HStack(spacing: 3) {
-          Text(context.state.catEmoji)
+          Text(state.catEmoji)
             .font(.system(size: 14))
         }
       } compactTrailing: {
         // Compact Trailing: Live timer or remaining seconds
-        if let endTime = context.state.endTimeTimestamp, endTime > Date().timeIntervalSince1970 {
+        if let endTime = state.endTimeTimestamp, endTime > Date().timeIntervalSince1970 {
           Text(timerInterval: Date()...Date(timeIntervalSince1970: endTime), countsDown: true)
             .font(.system(size: 11, weight: .bold, design: .monospaced))
             .foregroundColor(Color(red: 0.29, green: 0.87, blue: 0.50))
             .frame(width: 44)
-        } else if context.state.remainingSeconds > 0 {
-          Text(formatSeconds(context.state.remainingSeconds))
+        } else if state.remainingSeconds > 0 {
+          Text(formatSeconds(state.remainingSeconds))
             .font(.system(size: 11, weight: .bold, design: .monospaced))
             .foregroundColor(Color(red: 0.29, green: 0.87, blue: 0.50))
             .frame(width: 44)
@@ -189,7 +197,7 @@ struct FocusCatLiveActivityWidget: Widget {
             .font(.system(size: 11))
         }
       } minimal: {
-        Text(context.state.catEmoji)
+        Text(state.catEmoji)
           .font(.system(size: 12))
       }
     }
