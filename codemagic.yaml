@@ -34,9 +34,6 @@ workflows:
       - name: Flutter unit tests
         script: |
           flutter test
-      - name: Install CocoaPods
-        script: |
-          cd ios && pod install && cd ..
       - name: Build iOS (Unsigned Release)
         script: |
           flutter build ios --release --no-codesign
@@ -100,9 +97,6 @@ workflows:
       - name: Flutter unit tests
         script: |
           flutter test
-      - name: Install CocoaPods
-        script: |
-          cd ios && pod install && cd ..
       - name: Build IPA for distribution
         script: |
           flutter build ipa --release \
