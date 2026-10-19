@@ -67,8 +67,8 @@ workflows:
       flutter: stable
       xcode: latest
       cocoapods: default
-      groups:
-        - app_store_credentials
+      # groups:
+      #   - app_store_credentials
       vars:
         BUNDLE_ID: "com.example.focuscatIos"
         XCODE_WORKSPACE: "ios/Runner.xcworkspace"
@@ -111,12 +111,16 @@ workflows:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
       - flutter_drive.log
-    publishing:
-      app_store_connect:
-        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        key_identifier: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-        submit_to_testflight: true
+    # -------------------------------------------------------------------------
+    # Optional: Uncomment publishing once you add your App Store Connect API key
+    # in Codemagic UI -> App settings -> Environment variables -> app_store_credentials
+    # -------------------------------------------------------------------------
+    # publishing:
+    #   app_store_connect:
+    #     api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+    #     key_identifier: $APP_STORE_CONNECT_KEY_IDENTIFIER
+    #     issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+    #     submit_to_testflight: true
 
   # ---------------------------------------------------------------------------
   # 3. Android Release Workflow (APK & App Bundle)
